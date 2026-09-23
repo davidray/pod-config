@@ -338,3 +338,29 @@ def test_startup_failure_saves_logs_before_terminating(cfg, patch_model_transpor
     assert "line 2" in saved[0].read_text()  # runpod logs API too
     assert fake.terminated == ["pod_1"]
     assert any("boom in engine core" in m for m in msgs)
+
+
+def test_self_stop_key_is_passed_and_never_committed(cfg):
+    p = cfg.profile("a6000")
+    env = podspec.pod_env(p, endpoint_api_key="k" * 30, list_cost_per_hr=0.53, self_stop_key="rpa_SELFSTOP_0123456789")
+    assert env["QWENBENCH_SELF_STOP_KEY"] == "rpa_SELFSTOP_0123456789"
+    committed = podspec.rendered_for_repo(podspec.create_body(p, env=env, data_center_ids=[], network_volume_id="v"))
+    assert "rpa_SELFSTOP" not in json.dumps(committed)
+
+
+def test_up_warns_when_pod_cannot_stop_itself(cfg, patch_model_transport):
+    fake = FakeRunpod()
+    base = ready_transport()
+
+    def handler(req):
+        if req.url.path == "/status":
+            return httpx.Response(200, json={"phase": "server_up", "runpod_api_auth_ok": False,
+                                             "runpod_api_key_source": "pod-scoped-key"})
+        return base.handle_request(req)
+    t = httpx.MockTransport(handler)
+    patch_model_transport(t)
+    prov, _ = provider(cfg, fake, t)
+    msgs = []
+    prov.up(cfg.profile("a6000"), progress=msgs.append)
+    assert any("cannot stop it" in m for m in msgs)
+    assert any(e["event"] == "self-stop-unavailable" for e in read_events())

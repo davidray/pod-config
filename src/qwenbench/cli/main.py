@@ -110,6 +110,9 @@ def doctor(
     key = get_secret("RUNPOD_API_KEY")
     add("ok" if key else "FAIL", "RUNPOD_API_KEY", "set" if key else "export it or add to .env")
     add("ok", "HF_TOKEN", "set" if get_secret("HF_TOKEN") else "not set (model is not gated; optional)")
+    add("ok" if get_secret("RUNPOD_SELF_STOP_API_KEY") else "warn", "RUNPOD_SELF_STOP_API_KEY",
+        "set" if get_secret("RUNPOD_SELF_STOP_API_KEY")
+        else "not set: pods cannot stop themselves (Runpod's pod key gets 403); only the local guard can")
     env_file = repo_root() / ".env"
     if env_file.exists():
         tracked = subprocess.run(["git", "ls-files", "--error-unmatch", ".env"], cwd=repo_root(),

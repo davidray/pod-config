@@ -15,7 +15,7 @@ from typing import Any
 
 from qwenbench.paths import repo_root
 
-SECRET_NAMES = ("RUNPOD_API_KEY", "HF_TOKEN", "QWEN_ENDPOINT_API_KEY", "ANTHROPIC_API_KEY")
+SECRET_NAMES = ("RUNPOD_API_KEY", "RUNPOD_SELF_STOP_API_KEY", "HF_TOKEN", "QWEN_ENDPOINT_API_KEY", "ANTHROPIC_API_KEY")
 SECRET_KEY_PATTERN = re.compile(r"(api[_-]?key|token|secret|password|authorization)", re.IGNORECASE)
 REDACTED = "***REDACTED***"
 

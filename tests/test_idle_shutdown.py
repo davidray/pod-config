@@ -187,3 +187,11 @@ def test_guard_session_and_spend_caps():
 def test_guard_blind_supervisor_is_not_trusted():
     assert decide(gi(supervisor=None, supervisor_last_seen=10_000.0 - 1000))[0] == "supervisor_unreachable"
     assert decide(gi(supervisor=None, supervisor_last_seen=10_000.0 - 100)) is None
+
+
+def test_supervisor_prefers_dedicated_self_stop_key(monkeypatch):
+    sup = load_supervisor(monkeypatch, RUNPOD_API_KEY="pod-scoped", QWENBENCH_SELF_STOP_KEY="dedicated")
+    assert sup.RUNPOD_KEY == "dedicated" and sup.KEY_SOURCE == "self-stop-key"
+    monkeypatch.delenv("QWENBENCH_SELF_STOP_KEY")
+    sup = load_supervisor(monkeypatch)
+    assert sup.RUNPOD_KEY == "pod-scoped" and sup.KEY_SOURCE == "pod-scoped-key"

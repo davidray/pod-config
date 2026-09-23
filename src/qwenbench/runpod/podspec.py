@@ -86,6 +86,7 @@ def pod_env(
     endpoint_api_key: str,
     list_cost_per_hr: float,
     hf_token: str | None = None,
+    self_stop_key: str | None = None,
 ) -> dict[str, str]:
     archive, digest = bootstrap_archive()
 
@@ -111,6 +112,8 @@ def pod_env(
     }
     if hf_token:
         env["HF_TOKEN"] = hf_token
+    if self_stop_key:
+        env["QWENBENCH_SELF_STOP_KEY"] = self_stop_key
     return env
 
 
@@ -153,7 +156,7 @@ def create_body(
     return body
 
 
-SECRET_ENV = ("VLLM_API_KEY", "HF_TOKEN")
+SECRET_ENV = ("VLLM_API_KEY", "HF_TOKEN", "QWENBENCH_SELF_STOP_KEY")
 
 
 def rendered_for_repo(body: dict[str, Any]) -> dict[str, Any]:
