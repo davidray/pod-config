@@ -12,6 +12,7 @@ import gzip
 import hashlib
 import io
 import json
+import math
 import tarfile
 from pathlib import Path
 from typing import Any
@@ -146,8 +147,9 @@ def create_body(
         body["mounts"] = {"network": [{"volumeId": network_volume_id, "path": profile.storage.mount_path}]}
     else:
         # Ephemeral: weights live on the container disk and are re-downloaded
-        # on every pod. Size the disk for weights + headroom.
-        body["disk"] = profile.container_disk_gb + profile.storage.size_gb
+        # on every pod. Size for the weights + 20% headroom, not the volume
+        # size: oversized disk requests narrow the set of hosts that can place us.
+        body["disk"] = profile.container_disk_gb + math.ceil(profile.model.size_gb * 1.2)
     return body
 
 

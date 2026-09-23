@@ -1,6 +1,6 @@
 ---
 user: david-christiansen
-updated: 2026-09-23T15:06:04Z
+updated: 2026-09-23T15:11:28Z
 repo: davidray/pod-config
 ---
 
@@ -16,7 +16,7 @@ repo: davidray/pod-config
 > 
 > 1. Provision a Runpod A6000 environm…
 
-_possibly stale — 1 commit(s) since, last set 11m ago_
+_possibly stale — 3 commit(s) since, last set 17m ago_
 
 ## Suggested next prompt
 
