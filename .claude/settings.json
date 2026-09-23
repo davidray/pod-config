@@ -1,0 +1,52 @@
+{
+  "hooks": {
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "command": "hero next checkpoint --quiet",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "hero next ingest --quiet",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      },
+      {
+        "added_by_hero": true,
+        "hooks": [
+          {
+            "command": "hero next compact-handoff --json",
+            "type": "command"
+          }
+        ],
+        "matcher": "compact"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "hero next checkpoint --quiet",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(hero:*)"
+    ]
+  }
+}
