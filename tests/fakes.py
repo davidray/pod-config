@@ -160,6 +160,7 @@ class FakeRunpod:
         self.terminated: list[str] = []
         self.capacity_errors = capacity_errors or set()
         self.statuses = statuses or ["PROVISIONING", "STARTING", "RUNNING"]
+        self.gpu_availability: dict[str, str] = {}
         self._n = 0
 
     def handler(self, request: httpx.Request) -> httpx.Response:
@@ -210,6 +211,10 @@ class FakeRunpod:
             self.volumes[vid] = {"id": vid, "name": body["name"], "size": body["size"],
                                  "dataCenter": body["dataCenter"], "type": "STANDARD"}
             return httpx.Response(201, json=self.volumes[vid])
+        if path.startswith("/v2/catalog/gpus/"):
+            gpu = path.rsplit("/", 1)[1].replace("%20", " ")
+            return httpx.Response(200, json={"id": gpu, "availability": self.gpu_availability.get(gpu, "LOW"),
+                                             "price": {"secure": 0.53, "community": 0.33}})
         if path == "/v2/catalog/datacenters":
             return httpx.Response(200, json={"dataCenters": [
                 {"id": "CA-MTL-3", "gpuAvailability": [{"id": "NVIDIA RTX A6000", "availability": "LOW"}],

@@ -258,7 +258,7 @@ Project shape: see [SNAPSHOT.md](.hero/SNAPSHOT.md).
 - Python 3.12 via `uv`. `make setup`, `make test` (never spends money), `make lint`, `make render`.
 - All tunables live in `config/*.yaml` (models, Runpod profiles, pricing, role policy). Do not put prices,
   GPU ids or model revisions in code.
-- After changing `config/` or `containers/qwen-vllm/`, run `uv run qwen infra render` (a test fails on drift).
+- After changing `config/` or `containers/qwen-vllm/`, run `uv run qwenbench infra render` (a test fails on drift).
 - Anything that can provision a paid GPU must stay behind `QWEN_RUNPOD_INTEGRATION=1`.
-- Benchmark cases need a `reference.patch`; `uv run qwen bench verify-cases` must pass.
+- Benchmark cases need a `reference.patch`; `uv run qwenbench bench verify-cases` must pass.
 - Design decisions are recorded in `docs/adr/`; add one when an assumption changes.

@@ -1,4 +1,4 @@
-"""Local backstop for automatic shutdown (`qwen guard <profile>`).
+"""Local backstop for automatic shutdown (`qwenbench guard <profile>`).
 
 The in-pod supervisor is the primary idle/session/spend enforcer: it keeps
 working when this laptop sleeps. It terminates the pod with Runpod's
@@ -89,7 +89,7 @@ def guard_running(profile: str) -> int | None:
 
 
 def spawn_guard(profile: str) -> int:
-    """Start `qwen guard <profile>` detached from this terminal."""
+    """Start `qwenbench guard <profile>` detached from this terminal."""
     existing = guard_running(profile)
     if existing:
         return existing

@@ -10,8 +10,8 @@ from qwenbench.paths import repo_root
 def test_rendered_infra_matches_config(cfg):
     for name in cfg.profile_names():
         path = repo_root() / "infra" / "runpod" / "rendered" / f"{name}.json"
-        assert path.exists(), f"missing {path}; run `qwen infra render`"
-        assert json.loads(path.read_text()) == render_profile(cfg, name), f"{path} is stale; run `qwen infra render`"
+        assert path.exists(), f"missing {path}; run `qwenbench infra render`"
+        assert json.loads(path.read_text()) == render_profile(cfg, name), f"{path} is stale; run `qwenbench infra render`"
 
 
 def test_no_secrets_in_rendered_infra(cfg):

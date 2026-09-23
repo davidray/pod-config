@@ -1,10 +1,10 @@
 .PHONY: setup test test-all lint fmt render verify-cases doctor clean
 
-# One-time: install deps, put `qwen` on PATH (editable, so config edits apply), create .env
+# One-time: install deps, put `qwenbench` on PATH (editable, so config edits apply), create .env
 setup:
 	uv sync
 	uv tool install --editable . --force
-	uv run qwen setup
+	uv run qwenbench setup
 
 test:            ## unit + GPU-free end-to-end tests (never spends money)
 	uv run pytest
@@ -19,13 +19,13 @@ fmt:
 	uv run ruff check --fix src tests
 
 render:          ## regenerate infra/runpod/rendered/*.json from config/
-	uv run qwen infra render
+	uv run qwenbench infra render
 
 verify-cases:    ## prove each benchmark case: base fails, reference passes
-	uv run qwen bench verify-cases
+	uv run qwenbench bench verify-cases
 
 doctor:
-	uv run qwen doctor
+	uv run qwenbench doctor
 
 clean:
 	rm -rf .pytest_cache .ruff_cache

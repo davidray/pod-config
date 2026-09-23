@@ -7,7 +7,7 @@ is and where the number came from.
 
 | Source | Used when | Label |
 |---|---|---|
-| Runpod billing API `GET /v2/billing/pods?podId=` | `qwen bench finalize RUN` after billing settles (lag is undocumented; try an hour later) | **authoritative** |
+| Runpod billing API `GET /v2/billing/pods?podId=` | `qwenbench bench finalize RUN` after billing settles (lag is undocumented; try an hour later) | **authoritative** |
 | Pod's live `cost` field (USD/hr) × observed lifetime | Normal case: read at startup and by the supervisor | estimate (observed-rate) |
 | `config/pricing.yaml` list price × lifetime | Only if the live rate is unavailable | estimate (list-price, as of DATE) |
 
@@ -31,9 +31,9 @@ List prices on 2026-09-23 (update `config/pricing.yaml`, not code):
 | Container disk | $0.10/GB/month, running pods only | 30 GB, only while up |
 
 Reports show storage **prorated over the run's lifetime** ("storage estimate").
-The monthly standing charge is listed in `qwen storage list` and
+The monthly standing charge is listed in `qwenbench storage list` and
 `costs.storage_monthly_usd`. Delete volumes you are not using:
-`qwen storage delete P`.
+`qwenbench storage delete P`.
 
 ## Cost per successful task
 

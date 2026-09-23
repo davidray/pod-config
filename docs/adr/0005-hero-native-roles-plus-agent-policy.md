@@ -8,7 +8,7 @@ Status: accepted (2026-09-23)
 - **Agent files carry no role tag.** Installed `.claude/agents/*.md` have no `role:` frontmatter, even though Hero's own design spec proposed it. There is no agent-to-role mapping anywhere in Hero.
 
 ## Decision
-- **Hero stays the source of truth** for which model serves each role. `qwen hero configure` writes `design` and `review` as the frontier model and `execution` as `qwen:<profile>` into `hero.local.json`.
+- **Hero stays the source of truth** for which model serves each role. `qwenbench hero configure` writes `design` and `review` as the frontier model and `execution` as `qwen:<profile>` into `hero.local.json`.
 - **`config/role-policy.yaml` maps agent → Hero role**, the one thing Hero lacks. It can also map an agent directly to a provider (e.g. `Explore: frontier`) or to `deny`.
 - **Unclassified agents are denied** (fail closed).
 

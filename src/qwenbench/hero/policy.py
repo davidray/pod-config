@@ -74,7 +74,7 @@ def resolve(policy: RolePolicyFile, agent: str, models: HeroModels) -> Route:
         if not model_id:
             return Route(name, DENY, None, hero_role, None, None,
                          f"Hero role {hero_role!r} has no model configured (models.roles.{hero_role}); "
-                         "run `qwen hero configure`")
+                         "run `qwenbench hero configure`")
     else:
         # Direct provider mapping, e.g. `Explore: frontier`.
         rule = policy.providers.get(target)

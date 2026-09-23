@@ -1,6 +1,6 @@
 """Endpoint readiness as an explicit finite state machine.
 
-`qwen up` feeds observations (Runpod pod status, in-pod supervisor status, and
+`qwenbench up` feeds observations (Runpod pod status, in-pod supervisor status, and
 the result of a real inference probe) into `ReadinessMachine.observe()`. The
 machine never reports READY because Runpod says RUNNING: READY requires a
 successful authenticated inference request against the expected model.
@@ -113,7 +113,7 @@ class ReadinessMachine:
             self._fail(Phase.FAILED, f"pod entered {obs.pod_status}" + (f": {obs.detail}" if obs.detail else ""))
             return self.phase
         if obs.supervisor_phase == "vllm_exited":
-            self._fail(Phase.FAILED, "vLLM process exited during startup (see `qwen logs`)")
+            self._fail(Phase.FAILED, "vLLM process exited during startup (see `qwenbench logs`)")
             return self.phase
 
         if obs.pod_status in ("PROVISIONING", "STARTING", "RUNNING"):

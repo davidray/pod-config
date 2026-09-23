@@ -26,7 +26,7 @@ For each trial and each case:
 | `cli-customer-filter` | exploration | a cross-cutting option through CLI → repository with exact error contract |
 
 All run against `benchmarks/fixtures/ledgerlite`, a small but realistic
-invoicing library. `qwen bench verify-cases` proves each case is meaningful:
+invoicing library. `qwenbench bench verify-cases` proves each case is meaningful:
 the starting state **fails** validation and the committed `reference.patch`
 **passes**.
 
@@ -80,7 +80,7 @@ tasks/<case>/trial-N/
                   interventions, files_changed, lines +/-, gpu_attributable_s, estimated cost
   diff.patch      the agent's change (hidden tests excluded)
   setup.log  attempt-K/{transcript.json, tools.jsonl, validation.log}
-  subjective.json (optional, from `qwen bench evaluate`)
+  subjective.json (optional, from `qwenbench bench evaluate`)
 report.md  tasks.csv
 ```
 
@@ -94,7 +94,7 @@ Reading the numbers:
 
 ## Comparability
 
-`qwen bench compare` refuses to call runs comparable if any of these differ:
+`qwenbench bench compare` refuses to call runs comparable if any of these differ:
 
 - model revision, max context, image or vLLM argv
 - hardware overrides or generation parameters
@@ -108,7 +108,7 @@ is why `--repeat 3` exists.
 
 ## Subjective scores
 
-`qwen bench evaluate RUN CASE --trial N` records, on a 1-5 scale:
+`qwenbench bench evaluate RUN CASE --trial N` records, on a 1-5 scale:
 
 - correctness
 - code quality

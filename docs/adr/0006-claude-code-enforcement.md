@@ -13,10 +13,10 @@ Status: accepted (2026-09-23)
 Hooks (3) plus a dispatcher CLI (4):
 - **Deny:** spawning Qwen-routed, unclassified or loophole (`general-purpose`) subagents.
 - **Deny:** Claude-side edits to implementation files (spec/doc globs are allowed) and shell writes to them.
-- **Deny:** `qwen override` from Claude.
+- **Deny:** `qwenbench override` from Claude.
 - **Protect:** routing config.
-- **Instruct:** every denial names the exact `qwen dispatch` command. `qwen dispatch` refuses frontier roles, fails fast on an unavailable endpoint, and caps attempts per task. There is no Claude fallback code path at all.
-- **Audit:** content-level attribution (the ledger records blob SHAs; the Stop hook and `qwen hero audit`) catches anything the Bash heuristics miss.
+- **Instruct:** every denial names the exact `qwenbench dispatch` command. `qwenbench dispatch` refuses frontier roles, fails fast on an unavailable endpoint, and caps attempts per task. There is no Claude fallback code path at all.
+- **Audit:** content-level attribution (the ledger records blob SHAs; the Stop hook and `qwenbench hero audit`) catches anything the Bash heuristics miss.
 - **Override:** human-only, TTY-gated, expiring and logged.
 
 A CLI was chosen over an MCP server. It adds no dependency, long tasks can

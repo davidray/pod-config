@@ -35,7 +35,7 @@ See `docs/architecture.md` and ADRs 0001-0011. In summary:
 - **Metrics.** A streaming instrumented OpenAI client records TTFT, tokens, cached tokens, retries and failures to JSONL.
 - **Agent.** A minimal tool-calling agent loop in an OS sandbox (seatbelt or bwrap), plus the versioned `qwenbench.dispatch/v1` protocol.
 - **Benchmark.** daveeval: declarative cases, isolated deterministic workspaces, hidden and restored validation, attempts with feedback, interventions, diff capture, reports, a comparability-checked compare, and label-carrying cost accounting.
-- **Hero routing.** `role-policy.yaml` maps agent → Hero role, and Hero's `models.roles` maps role → model. Claude Code hooks deny Qwen-role subagents and Claude-side implementation edits. `qwen dispatch` is the only path for Qwen roles and fails fast with no fallback. A ledger with blob attribution backs `qwen hero audit`. Overrides are human-only and TTY-gated.
+- **Hero routing.** `role-policy.yaml` maps agent → Hero role, and Hero's `models.roles` maps role → model. Claude Code hooks deny Qwen-role subagents and Claude-side implementation edits. `qwenbench dispatch` is the only path for Qwen roles and fails fast with no fallback. A ledger with blob attribution backs `qwenbench hero audit`. Overrides are human-only and TTY-gated.
 
 ## Changes
 
@@ -56,12 +56,12 @@ Phases, each runnable and tested:
 
 ## Acceptance Criteria
 
-- [ ] `qwen up a6000` / `qwen up l40s` reach verified READY on real Runpod and print phase timings (needs credentials; not yet run)
-- [x] `qwen down --all` is idempotent and touches only `qwenbench-*` pods (tested against a fake v2 API)
+- [ ] `qwenbench up a6000` / `qwenbench up l40s` reach verified READY on real Runpod and print phase timings (needs credentials; not yet run)
+- [x] `qwenbench down --all` is idempotent and touches only `qwenbench-*` pods (tested against a fake v2 API)
 - [x] Idle, startup, session and spend shutdowns terminate the pod and record the reason (supervisor tested as a real process; guard decisions unit-tested)
 - [x] Same model revision, runtime, generation, agent, prompts, starting commits and validation on both GPUs; `compare` flags any difference
-- [x] Every daveeval case: the base fails validation and the reference passes (`qwen bench verify-cases`)
+- [x] Every daveeval case: the base fails validation and the reference passes (`qwenbench bench verify-cases`)
 - [x] A GPU-free end-to-end benchmark run produces run.json, requests.jsonl, per-trial result/diff, report.md and tasks.csv, with no secrets in results
-- [x] `qwen hero configure` preserves unrelated Hero config, touches no Hero-owned file, and survives a forced `hero install`; `hero models --check` and `hero check` pass
+- [x] `qwenbench hero configure` preserves unrelated Hero config, touches no Hero-owned file, and survives a forced `hero install`; `hero models --check` and `hero check` pass
 - [x] Hooks deny Qwen-role subagents, Claude-side implementation edits, shell writes and self-granted overrides; dispatch fails fast with no fallback and caps attempts
 - [ ] First live Claude Code session in a configured project confirms Claude follows the denial and dispatches (needs a logged-in `claude`)

@@ -295,3 +295,14 @@ def test_readiness_phases_reported(cfg, patch_model_transport):
     phases = load_session("a6000").startup
     assert {"requested", "allocated", "model_loaded", "ready"} <= set(phases)
     assert Phase.READY.name.lower() in phases
+
+
+def test_no_stock_does_not_create_a_billed_volume(cfg, patch_model_transport):
+    fake = FakeRunpod()
+    fake.gpu_availability["NVIDIA RTX A6000"] = "NONE"
+    t = ready_transport()
+    patch_model_transport(t)
+    prov, _ = provider(cfg, fake, t)
+    with pytest.raises(ProvisionError, match="no availability"):
+        prov.up(cfg.profile("a6000"))
+    assert not fake.volumes and not fake.created

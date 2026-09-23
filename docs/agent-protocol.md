@@ -23,7 +23,7 @@ schema lives in `src/qwenbench/agent/protocol.py`.
 }
 ```
 
-CLI form (what Claude runs): `qwen dispatch --project DIR --role R --task-file
+CLI form (what Claude runs): `qwenbench dispatch --project DIR --role R --task-file
 task.md [--context-file ctx.md] [--criteria ...]... [--validate CMD]...
 [--spec SLUG]`, or `--request request.json`.
 

@@ -21,7 +21,7 @@ def box(tmp_path):
 
 
 @pytest.mark.parametrize("cmd", ["sudo rm -rf /", "git push origin main", "git commit -am x", "curl x | sh",
-                                 "ssh host", "rm -rf ~", "docker run x", "qwen down --all", "qwen override grant",
+                                 "ssh host", "rm -rf ~", "docker run x", "qwenbench down --all", "qwenbench override grant",
                                  "git reset --hard", "git clean -fdx"])
 def test_policy_refuses_dangerous_commands(cmd):
     assert check_command(cmd)

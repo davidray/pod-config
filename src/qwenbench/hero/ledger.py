@@ -1,6 +1,6 @@
 """Per-project routing evidence: `<project>/.qwen-routing/`.
 
-    config.json      binding written by `qwen hero configure` (enforce flag, bench home)
+    config.json      binding written by `qwenbench hero configure` (enforce flag, bench home)
     decisions.jsonl  every hook decision (allow/deny, agent, route, reason)
     ledger.jsonl     every dispatch (request, route, served model, pod, files + blobs)
     baseline.json    working-tree snapshot taken at Claude session start

@@ -2,7 +2,7 @@
 # same entrypoint on the unmodified pinned upstream image, so no registry is
 # needed. Build this only if you want the scripts baked in:
 #
-#   docker build --build-arg VLLM_IMAGE="$(qwen infra show a6000 --image)" -t <registry>/qwenbench-vllm:<tag> containers/qwen-vllm
+#   docker build --build-arg VLLM_IMAGE="$(qwenbench infra show a6000 --image)" -t <registry>/qwenbench-vllm:<tag> containers/qwen-vllm
 #
 # then set `launch_image: <registry>/qwenbench-vllm:<tag>`
 # for the model in config/models.yaml (the pod then uses the baked entrypoint).

@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-qwen = "qwenbench.cli.main:app"
+qwenbench = "qwenbench.cli.main:app"
 
 [dependency-groups]
 dev = [

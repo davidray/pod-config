@@ -1,4 +1,4 @@
-"""`qwen hero ...`, `qwen dispatch`, `qwen override ...`"""
+"""`qwenbench hero ...`, `qwenbench dispatch`, `qwenbench override ...`"""
 
 from __future__ import annotations
 
@@ -76,7 +76,7 @@ def hero_configure(
     if rc != 0:
         err.print("[red]hero models --check failed[/]")
         raise typer.Exit(1)
-    console.print("next: [bold]qwen hero verify " + str(project) + "[/]")
+    console.print("next: [bold]qwenbench hero verify " + str(project) + "[/]")
 
 
 @hero_app.command("verify")
@@ -90,7 +90,7 @@ def hero_verify(project: Path = typer.Argument(Path("."))) -> None:
         except Exception as e:
             return False, str(e)
         if not ep:
-            return False, f"{profile} is not up (dispatch will fail fast until `qwen up {profile}`)"
+            return False, f"{profile} is not up (dispatch will fail fast until `qwenbench up {profile}`)"
         h = OpenAICompatibleModel(ep).health()
         return bool(h["health_ok"] and h["model_listed"]), json.dumps(h["models"])[:200]
 

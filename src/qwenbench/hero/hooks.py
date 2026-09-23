@@ -1,6 +1,6 @@
 """Claude Code hook handlers that enforce the Claude/Qwen boundary.
 
-Installed by `qwen hero configure` into the project's
+Installed by `qwenbench hero configure` into the project's
 `.claude/settings.local.json` (Hero never touches that file). Hook input and
 output follow https://code.claude.com/docs/en/hooks (verified 2026-09-23):
 stdin JSON with tool_name / tool_input / agent_type; deny with exit code 2
@@ -8,14 +8,14 @@ plus a JSON `hookSpecificOutput.permissionDecision = "deny"`.
 
 PreToolUse rules (only when <project>/.qwen-routing/config.json enforces):
 
-  Agent/Task  subagent routed to Qwen      -> DENY, tell Claude to run `qwen dispatch`
+  Agent/Task  subagent routed to Qwen      -> DENY, tell Claude to run `qwenbench dispatch`
               subagent denied/unknown      -> DENY
               subagent routed to frontier  -> allow
   Edit/Write/MultiEdit/NotebookEdit
               protected path               -> DENY (always, even with overrides)
               caller is frontier (main thread or design/review subagent)
                 and path is not frontier-writable (specs/docs) -> DENY
-  Bash        `qwen override ...`           -> DENY (humans only)
+  Bash        `qwenbench override ...`           -> DENY (humans only)
               in-place edits / redirects into implementation files, git apply/patch -> DENY
   Anything the override store explicitly allows is let through and logged.
 
@@ -63,12 +63,12 @@ def dispatch_instructions(route: Route, project: Path) -> str:
     return (
         f"Role '{route.agent}' is assigned to Qwen ({route.model_id}) by the project model policy "
         f"({route.reason}). Claude must not perform it or spawn it as a Claude subagent. Delegate it:\n"
-        f"  qwen dispatch --project {shlex.quote(str(project))} --role {route.agent} "
+        f"  qwenbench dispatch --project {shlex.quote(str(project))} --role {route.agent} "
         f"--task-file <task.md> [--criteria '...'] [--validate '<test command>'] [--spec <slug>]\n"
         "Write the full task (spec excerpt, conventions, file pointers, acceptance criteria) to the task file "
         "first. The command prints a JSON DispatchResult. If it fails, STOP and report the failure to the "
         "human; do not implement the change yourself. Only a human can authorize Claude to take over "
-        "(`qwen override grant`, run by the human in their own terminal)."
+        "(`qwenbench override grant`, run by the human in their own terminal)."
     )
 
 
@@ -104,7 +104,7 @@ REDIRECT_RE = re.compile(r"(?<![0-9&<>])>{1,2}\s*([^\s;&|<>]+)")
 TEE_RE = re.compile(r"\btee\s+(?:-a\s+)?([^\s;&|]+)")
 INPLACE_RE = re.compile(r"\b(?:sed|gsed|perl|ruby)\b[^;&|]*\s-[a-zA-Z]*i[a-zA-Z]*\b[^;&|]*?\s([^\s;&|]+)\s*(?:$|[;&|])")
 PATCH_RE = re.compile(r"\b(git\s+(apply|am|checkout\s+[^;&|]*--\s)|patch\s)")
-OVERRIDE_RE = re.compile(r"\bqwen\s+override\b")
+OVERRIDE_RE = re.compile(r"\bqwen(bench)?\s+override\b")
 
 
 def _bash_write_targets(command: str) -> tuple[list[str], str | None]:
@@ -162,7 +162,7 @@ def decide_pre_tool_use(event: dict[str, Any], policy: RolePolicyFile, project: 
             return Decision(False, (
                 f"{rel} is an implementation file. Under this project's model policy Claude "
                 f"({role}) plans, designs and reviews; implementation is performed by the Qwen worker. "
-                "Delegate with `qwen dispatch --role engineer ...` (or the specialized implementation role). "
+                "Delegate with `qwenbench dispatch --role engineer ...` (or the specialized implementation role). "
                 "If dispatch is failing, stop and surface the failure to the human instead of editing."
             ), "edit-impl-denied", caller)
         return Decision(True, "no file target", "edit-no-target", caller)
@@ -170,7 +170,7 @@ def decide_pre_tool_use(event: dict[str, Any], policy: RolePolicyFile, project: 
     if tool == "Bash":
         cmd = tin.get("command") or ""
         if OVERRIDE_RE.search(cmd):
-            return Decision(False, "Overrides are human-only. Ask the human to run `qwen override grant` in their "
+            return Decision(False, "Overrides are human-only. Ask the human to run `qwenbench override grant` in their "
                             "own terminal if they want Claude to take over a Qwen-assigned role.",
                             "override-human-only", caller)
         if caller and caller.is_qwen:
@@ -179,7 +179,7 @@ def decide_pre_tool_use(event: dict[str, Any], policy: RolePolicyFile, project: 
         role = caller.agent if caller else "main-thread"
         edits_ov = overrides.find_active(project, role, "edits") or overrides.find_active(project, "*", "edits")
         if blanket and not edits_ov:
-            return Decision(False, f"{blanket}. Implementation changes go through `qwen dispatch`.",
+            return Decision(False, f"{blanket}. Implementation changes go through `qwenbench dispatch`.",
                             "bash-patch-denied", caller)
         for t in targets:
             rel = _rel(project, t, event.get("cwd"))
@@ -188,7 +188,7 @@ def decide_pre_tool_use(event: dict[str, Any], policy: RolePolicyFile, project: 
             if _matches(rel, enf.protected):
                 return Decision(False, f"{rel} is protected routing configuration.", "protected-path", caller)
             if not _matches(rel, enf.frontier_writable) and not edits_ov:
-                return Decision(False, f"shell write to implementation file {rel}; delegate via `qwen dispatch`.",
+                return Decision(False, f"shell write to implementation file {rel}; delegate via `qwenbench dispatch`.",
                                 "bash-write-denied", caller)
         return Decision(True, "shell command allowed", "bash-ok", caller)
 
@@ -205,13 +205,13 @@ def session_context(policy: RolePolicyFile, project: Path) -> str:
     execution = models.model_for("execution")
     return (
         "## Model routing policy (enforced by qwenbench hooks)\n"
-        f"Implementation roles run on Qwen ({execution}) via `qwen dispatch`, never as Claude subagents and "
+        f"Implementation roles run on Qwen ({execution}) via `qwenbench dispatch`, never as Claude subagents and "
         "never by Claude editing implementation files directly:\n"
         f"  {', '.join(qwen)}\n"
         f"Claude performs: {', '.join(frontier)}.\n"
         "Claude may write specs and docs (.hero/**, docs/**, *.md). For implementation, write a precise task "
         "file (spec excerpt, conventions, files, acceptance criteria, validation command) and run "
-        "`qwen dispatch --project <root> --role <role> --task-file <file> --validate '<cmd>'`. Review the JSON "
+        "`qwenbench dispatch --project <root> --role <role> --task-file <file> --validate '<cmd>'`. Review the JSON "
         "result and the diff. If dispatch fails beyond the retry policy, stop and report it; do not fall back "
         "to implementing it yourself. Only the human can grant an override."
     )
@@ -222,7 +222,7 @@ def _project_root(event: dict[str, Any]) -> Path:
 
 
 def main(kind: str, stdin: str | None = None) -> int:
-    """Entry point for `qwen hook <kind>`; returns the process exit code."""
+    """Entry point for `qwenbench hook <kind>`; returns the process exit code."""
     from qwenbench.config import load_config
 
     raw = stdin if stdin is not None else sys.stdin.read()
@@ -286,6 +286,6 @@ def main(kind: str, stdin: str | None = None) -> int:
             print(json.dumps({"systemMessage": (
                 "qwenbench audit: implementation files changed this session without a matching Qwen dispatch: "
                 + ", ".join(flagged[:10]) + (" ..." if len(flagged) > 10 else "")
-                + ". Run `qwen hero audit` for details.")}))
+                + ". Run `qwenbench hero audit` for details.")}))
         return 0
     return 0

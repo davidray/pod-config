@@ -6,8 +6,8 @@
 api:
   base_url: https://api.runpod.io
   request_timeout_s: 30
-  # Pods whose name starts with this prefix are considered ours by `qwen list`
-  # and `qwen down --all`.
+  # Pods whose name starts with this prefix are considered ours by `qwenbench list`
+  # and `qwenbench down --all`.
   pod_name_prefix: qwenbench-
 
 defaults:
@@ -20,7 +20,7 @@ defaults:
   endpoint_mode: proxy              # proxy | tcp (public IP + mapped port, no TLS)
   port: 8000
   watchdog_port: 8001
-  # Lifecycle guards (all overridable per `qwen up` invocation).
+  # Lifecycle guards (all overridable per `qwenbench up` invocation).
   idle_timeout: 30m                 # "off" disables; must be explicit
   startup_timeout: 25m              # first boot downloads ~31 GB of weights
   max_session: 8h                   # hard cap regardless of activity; "off" disables
@@ -39,7 +39,7 @@ profiles:
     description: NVIDIA RTX A6000 48GB (Ampere sm_86) - FP8 weights via Marlin W8A16 kernels
     gpu_type_id: "NVIDIA RTX A6000"
     # Data centers that (as of 2026-09-23) list both A6000 stock and network
-    # volume support. `qwen doctor` re-checks this live.
+    # volume support. `qwenbench doctor` re-checks this live.
     data_center_ids: [CA-MTL-3, EU-RO-1]
     storage:
       volume_name: qwenbench-hf-cache-a6000

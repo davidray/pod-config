@@ -2,8 +2,8 @@
 
 Overrides are stored in the qwenbench state dir (outside the project, so an
 agent in the project cannot write them), expire, and can only be created from
-an interactive terminal: `qwen override grant` refuses when stdin is not a TTY,
-and the PreToolUse hook denies Claude any `qwen override` command. Every grant,
+an interactive terminal: `qwenbench override grant` refuses when stdin is not a TTY,
+and the PreToolUse hook denies Claude any `qwenbench override` command. Every grant,
 use and revocation is logged to the project ledger and the global event log.
 """
 

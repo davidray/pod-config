@@ -1,4 +1,4 @@
-"""`qwen bench ...`"""
+"""`qwenbench bench ...`"""
 
 from __future__ import annotations
 
@@ -78,7 +78,7 @@ def bench_run(
     case: list[str] = typer.Option(None, "--case", help="Run only these case ids"),
     max_attempts: int = typer.Option(None, help="Override the suite's max attempts per task"),
     interactive: bool = typer.Option(False, help="Offer hint/manual-fix interventions on failure (recorded)"),
-    auto_up: bool = typer.Option(False, help="Run `qwen up` first if the profile is not up"),
+    auto_up: bool = typer.Option(False, help="Run `qwenbench up` first if the profile is not up"),
     down_after: bool = typer.Option(False, help="Terminate the pod when the run finishes"),
     keep_workspaces: bool = typer.Option(False),
     allow_unsandboxed: bool = typer.Option(False, help="Run without an OS sandbox (recorded in results)"),
@@ -96,7 +96,7 @@ def bench_run(
     ep = prov.endpoint(p)
     if not ep:
         if not auto_up:
-            err.print(f"{profile} is not up. Run `qwen up {profile}` or pass --auto-up.")
+            err.print(f"{profile} is not up. Run `qwenbench up {profile}` or pass --auto-up.")
             raise typer.Exit(1)
         ep = prov.up(p, UpOptions(), progress=console.print)
     session = load_session(profile)

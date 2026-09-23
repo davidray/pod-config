@@ -1,4 +1,4 @@
-"""`qwen`: provision Runpod Qwen, benchmark it, and route Hero roles to it."""
+"""`qwenbench`: provision Runpod Qwen, benchmark it, and route Hero roles to it."""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ def setup() -> None:
     console.print(f"state dir: {state_dir()}")
     for tool in REQUIRED_TOOLS:
         console.print(f"{'ok ' if shutil.which(tool) else 'MISSING'} {tool}")
-    console.print("next: [bold]qwen doctor[/]")
+    console.print("next: [bold]qwenbench doctor[/]")
 
 
 @app.command()
@@ -104,7 +104,7 @@ def doctor(
         import json as _json
         if not path.exists() or path.read_text() != _json.dumps(render_profile(c, n), indent=2) + "\n":
             stale.append(n)
-    add("warn" if stale else "ok", "rendered infra in sync", f"stale: {stale}; run `qwen infra render`" if stale else "")
+    add("warn" if stale else "ok", "rendered infra in sync", f"stale: {stale}; run `qwenbench infra render`" if stale else "")
 
     # secrets
     key = get_secret("RUNPOD_API_KEY")
@@ -160,7 +160,7 @@ def doctor(
             try:
                 vol = prov.find_volume(p) if p.storage.mode == "network-volume" else None
                 add("ok", f"{n}: cache volume", f"{vol.name} {vol.id} in {vol.data_center}" if vol
-                    else "not created yet (first `qwen up` creates it)")
+                    else "not created yet (first `qwenbench up` creates it)")
             except Exception as e:
                 add("warn", f"{n}: cache volume", str(e))
             ep = prov.endpoint(p)

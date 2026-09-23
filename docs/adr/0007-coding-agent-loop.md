@@ -26,7 +26,7 @@ on Linux:
 - outbound network denied, loopback allowed
 - reads of ~/.ssh, ~/.aws, ~/.config/gh, keychains, the bench `.env` and qwenbench session/override state denied
 - the environment rebuilt from an allowlist
-- a static command policy on top (no git history rewrites or pushes, sudo, remote shells, or `qwen up/down/override`)
+- a static command policy on top (no git history rewrites or pushes, sudo, remote shells, or `qwenbench up/down/override`)
 
 The seatbelt profile was verified on this machine; a profile containing
 `(allow network* (remote unix-socket))` silently re-enabled egress, so it was

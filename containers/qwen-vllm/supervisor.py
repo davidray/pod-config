@@ -6,7 +6,7 @@ Runs inside the pinned vLLM image (stdlib only). Responsibilities:
   1. Launch `vllm serve` with the exact argv rendered by the qwenbench CLI
      (env QWENBENCH_VLLM_ARGV, a JSON list) and tee its output to the
      persistent volume and to stdout (so the Runpod logs API sees it).
-  2. Report boot phases so `qwen up` can distinguish
+  2. Report boot phases so `qwenbench up` can distinguish
      container_started -> vllm_starting -> model_loading -> server_up.
      (The CLI itself confirms "ready" with a real inference request.)
   3. Enforce lifecycle guards and terminate THIS pod via the Runpod API:
@@ -22,7 +22,7 @@ Runs inside the pinned vLLM image (stdlib only). Responsibilities:
 HTTP status endpoint (port QWENBENCH_WATCHDOG_PORT, bearer-token protected):
   GET /status  -> JSON phase, idle clock, limits, recent shutdown history
   GET /logs    -> last N lines of the vLLM log (?n=200)
-  POST /touch  -> reset the idle clock (used by `qwen keepalive`)
+  POST /touch  -> reset the idle clock (used by `qwenbench keepalive`)
 """
 
 from __future__ import annotations
@@ -225,7 +225,7 @@ def terminate_self(reason: str, detail: str) -> None:
                 return
         except (OSError, subprocess.TimeoutExpired):
             pass
-    log("ERROR: could not stop this pod via the API. The local `qwen guard` backstop must stop it.")
+    log("ERROR: could not stop this pod via the API. The local `qwenbench guard` backstop must stop it.")
 
 
 # ------------------------------------------------------------------ vLLM

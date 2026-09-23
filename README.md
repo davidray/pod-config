@@ -13,15 +13,18 @@ hooks rather than by advice, from doing Qwen-assigned implementation work
 itself or silently falling back to Claude.
 
 ```
-qwen up a6000      -> pod + persistent model cache + in-pod idle watchdog + local guard
-qwen chat a6000    -> OpenAI-compatible endpoint, per-response TTFT / tok/s
-qwen bench run     -> real repo tasks in isolated workspaces, sandboxed agent, hidden validation
-qwen bench compare -> A6000 vs L40S: successes, first-pass, TTFT, tok/s, GPU time, $ per success
-qwen hero configure-> design/review -> Claude, execution -> Qwen, enforced by Claude Code hooks
-qwen down --all    -> nothing left billing
+qwenbench up a6000      -> pod + persistent model cache + in-pod idle watchdog + local guard
+qwenbench chat a6000    -> OpenAI-compatible endpoint, per-response TTFT / tok/s
+qwenbench bench run     -> real repo tasks in isolated workspaces, sandboxed agent, hidden validation
+qwenbench bench compare -> A6000 vs L40S: successes, first-pass, TTFT, tok/s, GPU time, $ per success
+qwenbench hero configure-> design/review -> Claude, execution -> Qwen, enforced by Claude Code hooks
+qwenbench down --all    -> nothing left billing
 ```
 
 ## Zero to first inference
+
+The command is `qwenbench`, not `qwen`: Alibaba's Qwen Code CLI installs a `qwen`
+executable, and a PATH collision would be dangerous here, because Claude Code hooks call this tool.
 
 Prerequisites: `git`, [`uv`](https://docs.astral.sh/uv/), a Runpod account
 with credit. macOS gives the agent sandbox for free (`sandbox-exec`); on Linux
@@ -29,15 +32,15 @@ install `bubblewrap`. Hero and Claude Code are needed only for the routing part.
 
 ```bash
 git clone git@github.com:davidray/pod-config.git qwenbench && cd qwenbench
-make setup                 # uv sync, installs `qwen` on PATH, creates .env (chmod 600)
+make setup                 # uv sync, installs `qwenbench` on PATH, creates .env (chmod 600)
 $EDITOR .env               # RUNPOD_API_KEY=... (HF_TOKEN optional: the model is not gated)
-qwen doctor                # tools, credentials, config, live GPU availability, volumes
-qwen up a6000              # first boot downloads ~31 GB into the cache volume (~10-20 min)
-qwen chat a6000
-qwen down a6000
+qwenbench doctor                # tools, credentials, config, live GPU availability, volumes
+qwenbench up a6000              # first boot downloads ~31 GB into the cache volume (~10-20 min)
+qwenbench chat a6000
+qwenbench down a6000
 ```
 
-`qwen up` prints each startup phase with timings and only reports ready
+`qwenbench up` prints each startup phase with timings and only reports ready
 after a real authenticated completion from the expected model. Runpod saying
 `RUNNING` is not enough:
 
@@ -50,40 +53,40 @@ pod requested -> pod allocated -> container started -> vLLM process started
 
 | | |
 |---|---|
-| `qwen setup` / `qwen doctor [--profile P] [--project DIR]` | first-run setup; full health check including endpoint identity and Hero |
-| `qwen up P [--idle-timeout 60m\|off] [--max-session 4h] [--max-spend 5] [--storage ephemeral]` | provision and wait for verified readiness |
-| `qwen status [P]` | live pods, $/hr, spend so far, idle clock, guard, recent auto-shutdowns |
-| `qwen endpoint P [--export] [--show-key]` / `qwen logs P [-f]` / `qwen chat P` | use the endpoint |
-| `qwen down P` / `qwen down --all` | terminate (idempotent) |
-| `qwen list` | profiles and any live qwenbench pods |
-| `qwen keepalive P` | reset the idle clock without inference |
-| `qwen storage list\|ensure P\|delete P` | persistent model-cache volumes |
-| `qwen infra render [--check]` / `qwen infra show P` | the committed infrastructure definition |
-| `qwen bench run -p P -s daveeval [--repeat 3] [--case ID] [--interactive] [--auto-up --down-after]` | benchmark |
-| `qwen bench report RUN [--format md\|csv\|json]` / `qwen bench compare RUN_A RUN_B` | results |
-| `qwen bench evaluate RUN CASE [--trial N]` | your 1-5 subjective scores (stored separately) |
-| `qwen bench finalize RUN` | pull authoritative Runpod billing once it has settled |
-| `qwen bench verify-cases` | GPU-free self-test: every case's base fails, its reference solution passes |
-| `qwen hero inspect\|configure\|verify\|audit\|unconfigure DIR` | Hero/Claude Code routing |
-| `qwen dispatch --project DIR --role R --task-file F --validate CMD` | run a Qwen-assigned role (what Claude calls) |
-| `qwen override grant\|list\|revoke` | human-only escape hatch |
+| `qwenbench setup` / `qwenbench doctor [--profile P] [--project DIR]` | first-run setup; full health check including endpoint identity and Hero |
+| `qwenbench up P [--idle-timeout 60m\|off] [--max-session 4h] [--max-spend 5] [--storage ephemeral]` | provision and wait for verified readiness |
+| `qwenbench status [P]` | live pods, $/hr, spend so far, idle clock, guard, recent auto-shutdowns |
+| `qwenbench endpoint P [--export] [--show-key]` / `qwenbench logs P [-f]` / `qwenbench chat P` | use the endpoint |
+| `qwenbench down P` / `qwenbench down --all` | terminate (idempotent) |
+| `qwenbench list` | profiles and any live qwenbench pods |
+| `qwenbench keepalive P` | reset the idle clock without inference |
+| `qwenbench storage list\|ensure P\|delete P` | persistent model-cache volumes |
+| `qwenbench infra render [--check]` / `qwenbench infra show P` | the committed infrastructure definition |
+| `qwenbench bench run -p P -s daveeval [--repeat 3] [--case ID] [--interactive] [--auto-up --down-after]` | benchmark |
+| `qwenbench bench report RUN [--format md\|csv\|json]` / `qwenbench bench compare RUN_A RUN_B` | results |
+| `qwenbench bench evaluate RUN CASE [--trial N]` | your 1-5 subjective scores (stored separately) |
+| `qwenbench bench finalize RUN` | pull authoritative Runpod billing once it has settled |
+| `qwenbench bench verify-cases` | GPU-free self-test: every case's base fails, its reference solution passes |
+| `qwenbench hero inspect\|configure\|verify\|audit\|unconfigure DIR` | Hero/Claude Code routing |
+| `qwenbench dispatch --project DIR --role R --task-file F --validate CMD` | run a Qwen-assigned role (what Claude calls) |
+| `qwenbench override grant\|list\|revoke` | human-only escape hatch |
 
 ## Benchmarking A6000 vs L40S
 
 ```bash
-qwen up a6000
-qwen bench run --profile a6000 --suite daveeval --repeat 3
-qwen down a6000
+qwenbench up a6000
+qwenbench bench run --profile a6000 --suite daveeval --repeat 3
+qwenbench down a6000
 
-qwen up l40s
-qwen bench run --profile l40s --suite daveeval --repeat 3
-qwen down l40s
+qwenbench up l40s
+qwenbench bench run --profile l40s --suite daveeval --repeat 3
+qwenbench down l40s
 
-qwen bench list
-qwen bench compare <a6000-run-id> <l40s-run-id>
+qwenbench bench list
+qwenbench bench compare <a6000-run-id> <l40s-run-id>
 ```
 
-Or one command per GPU: `qwen bench run -p l40s -s daveeval --repeat 3 --auto-up --down-after`.
+Or one command per GPU: `qwenbench bench run -p l40s -s daveeval --repeat 3 --auto-up --down-after`.
 
 Both profiles run the identical model revision, image, vLLM argv, generation
 settings, agent loop, prompts, starting commits and validation. `compare`
@@ -93,12 +96,12 @@ See [docs/benchmarking.md](docs/benchmarking.md).
 ## Hero integration
 
 ```bash
-qwen up a6000
-qwen hero inspect ~/code/myproject                               # roles, agents, routes (read-only)
-qwen hero configure ~/code/myproject --execution-profile a6000   # shows the diff, asks, applies
-qwen hero verify ~/code/myproject                                # proves the wiring, incl. a real hook call
+qwenbench up a6000
+qwenbench hero inspect ~/code/myproject                               # roles, agents, routes (read-only)
+qwenbench hero configure ~/code/myproject --execution-profile a6000   # shows the diff, asks, applies
+qwenbench hero verify ~/code/myproject                                # proves the wiring, incl. a real hook call
 # work in Claude Code as usual; afterwards:
-qwen hero audit ~/code/myproject                                 # which model did what
+qwenbench hero audit ~/code/myproject                                 # which model did what
 ```
 
 [docs/hero-routing.md](docs/hero-routing.md) explains exactly what is
@@ -108,9 +111,9 @@ enforced, how, and where the limits are.
 
 - At most one GPU at a time by default (`guards.max_gpu_count: 1`). A second profile is refused while the first is live.
 - In-pod watchdog: idle 30 min (configurable per `up`), startup timeout 25 min, max session 8 h, max spend $10. It terminates its own pod and records the reason on the volume.
-- Local guard (`qwen guard`, started by `up`) is a second layer. It uses your account key and catches a watchdog that cannot stop its pod.
+- Local guard (`qwenbench guard`, started by `up`) is a second layer. It uses your account key and catches a watchdog that cannot stop its pod.
 - A failed startup terminates the pod (use `--keep-on-failure` to debug).
-- `qwen status` shows estimated spend and warns about any live pod. `qwen down --all` terminates everything qwenbench created, and nothing else.
+- `qwenbench status` shows estimated spend and warns about any live pod. `qwenbench down --all` terminates everything qwenbench created, and nothing else.
 - Network volumes are billed monthly whether or not a GPU runs: [docs/COSTS.md](docs/COSTS.md).
 
 ## Tests

@@ -1,6 +1,6 @@
 """Render a Profile into the exact vLLM argv and Runpod v2 CreatePodRequest.
 
-This is the infrastructure definition: `qwen infra render` writes the output
+This is the infrastructure definition: `qwenbench infra render` writes the output
 (with secrets replaced by placeholders) to infra/runpod/rendered/, and a test
 asserts the committed files match the config, so any drift is caught in CI.
 """
@@ -163,5 +163,5 @@ def rendered_for_repo(body: dict[str, Any]) -> dict[str, Any]:
     if "QWENBENCH_BOOTSTRAP" in out.get("env", {}):
         out["env"]["QWENBENCH_BOOTSTRAP"] = "<base64 tar.gz of containers/qwen-vllm; see QWENBENCH_BOOTSTRAP_SHA256>"
     for mount in out.get("mounts", {}).get("network", []):
-        mount["volumeId"] = "<discovered by name at `qwen up`>"
+        mount["volumeId"] = "<discovered by name at `qwenbench up`>"
     return out

@@ -148,7 +148,7 @@ def test_agent_cannot_write_routing_config_during_dispatch(cfg, configured_proje
 
 
 def test_cli_dispatch_exit_code_and_json(configured_project):
-    p = subprocess.run(["uv", "run", "--quiet", "qwen", "dispatch", "--project", str(configured_project),
+    p = subprocess.run(["uv", "run", "--quiet", "qwenbench", "dispatch", "--project", str(configured_project),
                         "--role", "brownfield-architect", "--task", "design it"], capture_output=True, text=True)
     assert p.returncode == 3
     assert json.loads(p.stdout)["failure"]["kind"] == "policy"

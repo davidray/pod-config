@@ -1,4 +1,4 @@
-"""`qwen hero inspect|configure|verify` for a Hero-managed project.
+"""`qwenbench hero inspect|configure|verify` for a Hero-managed project.
 
 What configure touches (and why each is safe from `hero upgrade`):
 
@@ -19,8 +19,10 @@ from __future__ import annotations
 import difflib
 import json
 import os
+import shlex
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -48,11 +50,13 @@ def run(cmd: list[str], cwd: Path, timeout: int = 60) -> tuple[int, str]:
 
 
 def hook_command() -> str:
-    """Absolute command for hooks, independent of the project's PATH."""
-    exe = shutil.which("qwen")
-    if exe:
-        return f"{exe} hook"
-    return f"{shutil.which('uv') or 'uv'} run --quiet --project {repo_root()} qwen hook"
+    """Absolute command for hooks, independent of the project's PATH.
+
+    Uses the interpreter running this code rather than a PATH lookup: other
+    tools install a `qwenbench` executable (e.g. Qwen Code), and a hook must never
+    resolve to one of them.
+    """
+    return f"{shlex.quote(sys.executable)} -m qwenbench.cli.main hook"
 
 
 # ------------------------------------------------------------------ inspect
@@ -222,18 +226,18 @@ def claude_local_block_for(cfg: Config, models: heroconfig.HeroModels) -> str:
     frontier = sorted(r.agent for r in table if r.is_frontier)
     body = (
         "## Model routing policy (enforced by qwenbench hooks)\n\n"
-        f"Implementation roles run on **Qwen ({models.model_for('execution')})** through `qwen dispatch`; "
+        f"Implementation roles run on **Qwen ({models.model_for('execution')})** through `qwenbench dispatch`; "
         "they are never spawned as Claude subagents, and Claude never edits implementation files itself:\n\n"
         f"{', '.join(qwen)}\n\n"
         f"Claude performs design, planning and review roles: {', '.join(frontier)}.\n\n"
         "To delegate: write a task file (spec excerpt, conventions, files to touch, acceptance criteria), then\n"
-        "`qwen dispatch --project \"$CLAUDE_PROJECT_DIR\" --role <role> --task-file <file> --validate '<test cmd>' "
+        "`qwenbench dispatch --project \"$CLAUDE_PROJECT_DIR\" --role <role> --task-file <file> --validate '<test cmd>' "
         "[--spec <slug>]`.\n"
         "Read the JSON DispatchResult and review the diff. If dispatch fails beyond the retry policy, stop and "
         "report the failure. Do not implement the work yourself and do not switch it to a Claude subagent: only "
-        "the human can authorize that with `qwen override grant` in their own terminal.\n"
+        "the human can authorize that with `qwenbench override grant` in their own terminal.\n"
     )
-    return (f"{BLOCK_START}\n<!-- Managed by `qwen hero configure` (qwenbench). "
+    return (f"{BLOCK_START}\n<!-- Managed by `qwenbench hero configure` (qwenbench). "
             f"Edit config/role-policy.yaml in the qwenbench repo instead. -->\n{body}{BLOCK_END}\n")
 
 
@@ -266,10 +270,10 @@ def simulate(cfg: Config, project: Path) -> list[dict[str, Any]]:
                                        "tool_input": {"file_path": str(project / ".hero/specs/x/spec.md")}}, True),
         ("main thread edits routing config", {"tool_name": "Edit",
                                               "tool_input": {"file_path": str(project / ".claude/settings.local.json")}}, False),
-        ("claude grants itself an override", {"tool_name": "Bash", "tool_input": {"command": "qwen override grant --role engineer"}}, False),
+        ("claude grants itself an override", {"tool_name": "Bash", "tool_input": {"command": "qwenbench override grant --role engineer"}}, False),
         ("shell redirect into src", {"tool_name": "Bash", "tool_input": {"command": "echo x > src/app.py"}}, False),
         ("run tests", {"tool_name": "Bash", "tool_input": {"command": "pytest -q"}}, True),
-        ("dispatch to qwen", {"tool_name": "Bash", "tool_input": {"command": "qwen dispatch --role engineer --task-file t.md"}}, True),
+        ("dispatch to qwen", {"tool_name": "Bash", "tool_input": {"command": "qwenbench dispatch --role engineer --task-file t.md"}}, True),
     ]
     out = []
     for label, event, expect_allow in cases:
@@ -301,8 +305,8 @@ def verify(cfg: Config, project: Path, endpoint_check=None) -> list[dict[str, An
         ", ".join(info["unclassified_agents"]) or "all classified")
     add("routing binding", info["routing_configured"], str(project / ROUTING_DIR / "config.json"))
     add("hooks in .claude/settings.local.json", info["hooks_installed"])
-    cmd = hook_command().split()[0]
-    add("hook command executable", Path(cmd).exists() or shutil.which(cmd) is not None, cmd)
+    cmd = shlex.split(hook_command())[0]
+    add("hook command executable", Path(cmd).exists(), cmd)
     for s in simulate(cfg, project):
         add(f"policy: {s['case']}", s["ok"], f"expected {s['expected']}, got {s['actual']} ({s['rule']})")
     # A real hook round-trip through the installed command (exercises the actual process boundary).
@@ -310,9 +314,9 @@ def verify(cfg: Config, project: Path, endpoint_check=None) -> list[dict[str, An
         event = json.dumps({"tool_name": "Agent", "tool_input": {"subagent_type": "engineer"}, "cwd": str(project),
                             "session_id": "qwen-hero-verify"})
         try:
-            p = subprocess.run([*hook_command().split(), "pre-tool-use"], input=event, capture_output=True, text=True,
+            p = subprocess.run([*shlex.split(hook_command()), "pre-tool-use"], input=event, capture_output=True, text=True,
                                cwd=project, env={**os.environ, "CLAUDE_PROJECT_DIR": str(project)}, timeout=60)
-            add("installed hook denies engineer spawn", p.returncode == 2 and "qwen dispatch" in p.stderr,
+            add("installed hook denies engineer spawn", p.returncode == 2 and "qwenbench dispatch" in p.stderr,
                 f"exit={p.returncode}")
         except (OSError, subprocess.TimeoutExpired) as e:
             add("installed hook denies engineer spawn", False, str(e))

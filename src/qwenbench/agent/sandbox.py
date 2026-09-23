@@ -43,7 +43,7 @@ DENY_PATTERNS: list[tuple[str, str]] = [
     (r":\(\)\s*\{", "fork bombs are not allowed"),
     (r"\bkill\s+(-9\s+)?-1\b", "killing all processes is not allowed"),
     (r"\b(docker|podman|kubectl)\b", "container/cluster tooling is not available to the agent"),
-    (r"\bqwen\s+(up|down|override|hero|dispatch|guard)\b", "the agent may not drive its own infrastructure or routing"),
+    (r"\bqwen(bench)?\s+(up|down|override|hero|dispatch|guard)\b", "the agent may not drive its own infrastructure or routing"),
     (r"\bchmod\s+(-R\s+)?[0-7]*777\s+/", "chmod 777 on system paths is not allowed"),
 ]
 

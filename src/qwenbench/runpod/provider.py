@@ -123,6 +123,11 @@ class RunpodPodsProvider:
                 progress(f"warning: volume {vol.name} is in {vol.data_center}, not in the profile's "
                          f"data_center_ids {profile.data_center_ids}; using it anyway")
             return vol
+        # Creating a volume starts a monthly charge; don't do it for a GPU with no stock.
+        catalog = self.client.gpu_catalog(profile.gpu_type_id, cloud=profile.cloud)
+        if catalog and catalog[0].get("availability") == "NONE":
+            raise ProvisionError(f"{profile.gpu_type_id} ({profile.cloud}) has no availability right now; "
+                                 "not creating its cache volume. Retry later (`qwenbench doctor` shows stock).")
         dcs = self.available_data_centers(profile)
         if not dcs:
             raise ProvisionError(f"profile {profile.name} has no data_center_ids to place its network volume")
@@ -142,7 +147,7 @@ class RunpodPodsProvider:
         limit = self.cfg.runpod.guards.max_gpu_count
         if others and not (opts.allow_concurrent or self.cfg.runpod.guards.allow_concurrent_profiles):
             names = ", ".join(f"{p.name} ({p.status}, ${p.cost_per_hr:.2f}/hr)" for p in others)
-            raise GuardViolation(f"other qwenbench pods are live: {names}. Run `qwen down --all`, "
+            raise GuardViolation(f"other qwenbench pods are live: {names}. Run `qwenbench down --all`, "
                                  "or pass --allow-concurrent (still subject to guards.max_gpu_count).")
         if gpus > limit:
             raise GuardViolation(f"starting {profile.name} would run {gpus} GPUs; guards.max_gpu_count={limit}")
@@ -180,7 +185,7 @@ class RunpodPodsProvider:
                 progress(f"{profile.name} already up: pod {pod.id} ({pod.status})")
                 return self._endpoint_from_session(session)
             raise GuardViolation(f"pod {pod.id} named {pod.name} is live but has no ready local session; "
-                                 f"run `qwen down {profile.name}` first")
+                                 f"run `qwenbench down {profile.name}` first")
 
         vol = self.ensure_volume(profile, progress)
         list_rate = self.cfg.pricing.gpu_rate(profile.gpu_type_id, profile.cloud) * profile.gpu_count
@@ -203,7 +208,7 @@ class RunpodPodsProvider:
                     "max_spend_usd": profile.max_spend_usd, "startup_timeout_s": profile.startup_timeout_s},
             vllm_argv=podspec.vllm_argv(profile), config_fingerprint=config_fingerprint(profile),
         )
-        save_session(session)  # before waiting: `qwen down` must work even if we are interrupted
+        save_session(session)  # before waiting: `qwenbench down` must work even if we are interrupted
         log_event("pod-created", profile=profile.name, pod_id=pod.id, gpu=profile.gpu_type_id,
                   data_center=pod.data_center_id, cost_per_hr=session.cost_per_hr, limits=session.limits)
         progress(f"pod {pod.id} requested ({profile.gpu_type_id}, {profile.cloud}, "
@@ -291,7 +296,7 @@ class RunpodPodsProvider:
         log_event("pod-terminated", profile=profile, pod_id=pod_id, reason=reason, already_gone=gone)
         return not gone
 
-    def down(self, profile: Profile, reason: str = "user: qwen down") -> list[str]:
+    def down(self, profile: Profile, reason: str = "user: qwenbench down") -> list[str]:
         """Idempotent. Terminates the session's pod and any pod carrying the profile's name."""
         session = load_session(profile.name)
         ids = {p.id for p in self.pods_for(profile)}
@@ -302,7 +307,7 @@ class RunpodPodsProvider:
         clear_session(profile.name)
         return terminated
 
-    def down_all(self, reason: str = "user: qwen down --all") -> list[str]:
+    def down_all(self, reason: str = "user: qwenbench down --all") -> list[str]:
         terminated = []
         for pod in self.our_pods():
             profile = pod.name.removeprefix(self.cfg.runpod.api.pod_name_prefix)

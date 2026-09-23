@@ -18,7 +18,7 @@ def ev(project, tool, agent_type=None, **tool_input):
 def test_spawning_qwen_role_is_denied_with_dispatch_instructions(cfg, configured_project):
     d = decide_pre_tool_use(ev(configured_project, "Agent", subagent_type="engineer"), cfg.policy, configured_project)
     assert not d.allow and d.rule == "agent-qwen-must-dispatch"
-    assert "qwen dispatch" in d.reason and "do not implement" in d.reason.lower()
+    assert "qwenbench dispatch" in d.reason and "do not implement" in d.reason.lower()
     assert d.route.model_id == "qwen:a6000"
 
 
@@ -83,7 +83,7 @@ def test_edit_outside_project_not_governed(cfg, configured_project, tmp_path):
 
 @pytest.mark.parametrize("cmd,allowed", [
     ("pytest -q", True),
-    ("qwen dispatch --role engineer --task-file t.md", True),
+    ("qwenbench dispatch --role engineer --task-file t.md", True),
     ("git status && git diff", True),
     ("echo hi > docs/notes.md", True),
     ("ls 2>/dev/null", True),
@@ -93,7 +93,7 @@ def test_edit_outside_project_not_governed(cfg, configured_project, tmp_path):
     ("git apply fix.patch", False),
     ("patch -p1 < fix.diff", False),
     ("git checkout HEAD -- src/app.py", False),
-    ("qwen override grant --role engineer --reason x", False),
+    ("qwenbench override grant --role engineer --reason x", False),
     ("echo x > .claude/settings.local.json", False),
 ])
 def test_bash_rules(cfg, configured_project, cmd, allowed):
@@ -136,7 +136,7 @@ def test_hook_main_denies_with_exit_2_and_json(configured_project, capsys, monke
     assert code == 2
     payload = json.loads(out.out)
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "qwen dispatch" in out.err
+    assert "qwenbench dispatch" in out.err
     log = read_jsonl(configured_project, "decisions.jsonl")
     assert log[-1]["allow"] is False and log[-1]["subagent"] == "engineer"
 
@@ -153,7 +153,7 @@ def test_session_start_injects_policy_and_records_baseline(configured_project, c
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(configured_project))
     assert hooks.main("session-start", json.dumps({"session_id": "s9", "cwd": str(configured_project)})) == 0
     ctx = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["additionalContext"]
-    assert "qwen dispatch" in ctx and "engineer" in ctx
+    assert "qwenbench dispatch" in ctx and "engineer" in ctx
     assert (configured_project / ".qwen-routing" / "baseline.json").exists()
 
 
@@ -168,3 +168,20 @@ def test_stop_hook_flags_unattributed_code_changes(configured_project, capsys, m
     hooks.main("stop", json.dumps({"session_id": "s", "cwd": str(p)}))
     msg = json.loads(capsys.readouterr().out)["systemMessage"]
     assert "src/app.py" in msg and "docs/note.md" not in msg
+
+
+def test_hook_command_never_resolves_qwen_via_path(monkeypatch):
+    """Other tools install a `qwen` executable (Qwen Code does); hooks must not call it."""
+    import shlex
+    import sys
+
+    from qwenbench.hero.configure import hook_command
+    monkeypatch.setenv("PATH", "/opt/homebrew/bin:/usr/bin")
+    argv = shlex.split(hook_command())
+    assert argv[:3] == [sys.executable, "-m", "qwenbench.cli.main"] and argv[3] == "hook"
+
+
+def test_bash_blocks_new_executable_name_for_overrides(cfg, configured_project):
+    d = decide_pre_tool_use(ev(configured_project, "Bash", command="qwenbench override grant --role engineer"),
+                            cfg.policy, configured_project)
+    assert not d.allow and d.rule == "override-human-only"

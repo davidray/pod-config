@@ -1,4 +1,4 @@
-"""`qwen dispatch`: run one Qwen-assigned role on a project and return a DispatchResult.
+"""`qwenbench dispatch`: run one Qwen-assigned role on a project and return a DispatchResult.
 
 Exit codes (Claude reads the JSON; codes make shell use unambiguous):
   0 completed   1 failed/blocked   3 refused by policy (role is not Qwen-routed)
@@ -54,7 +54,7 @@ def run_dispatch(cfg: Config, req: DispatchRequest, project: Path, provider_fact
     if prior >= budget:
         msg = (f"this task has already been dispatched {prior} time(s) (max_attempts_per_task={budget}). "
                "Stop and surface the failure to the human. Claude must not implement it instead; only a human "
-               "override (`qwen override grant`) or a revised task/spec can continue.")
+               "override (`qwenbench override grant`) or a revised task/spec can continue.")
         res = _refusal(req, dispatch_id, "policy", msg)
         log_dispatch(project, event="dispatch-refused", dispatch_id=dispatch_id, task_key=key, reason=msg,
                      role=req.role)
@@ -67,13 +67,13 @@ def run_dispatch(cfg: Config, req: DispatchRequest, project: Path, provider_fact
         provider = provider_factory(cfg)
     endpoint = provider.endpoint(profile)
     if endpoint is None:
-        msg = (f"no ready endpoint for profile {profile_name!r}. A human should run `qwen up {profile_name}` "
-               "(or check `qwen status`). Do not fall back to implementing this with Claude.")
+        msg = (f"no ready endpoint for profile {profile_name!r}. A human should run `qwenbench up {profile_name}` "
+               "(or check `qwenbench status`). Do not fall back to implementing this with Claude.")
         log_dispatch(project, event="dispatch-unavailable", dispatch_id=dispatch_id, role=req.role, profile=profile_name)
         return _refusal(req, dispatch_id, "endpoint_unavailable", msg, retryable=True), 4
     health = OpenAICompatibleModel(endpoint).health()
     if not (health["health_ok"] and health["model_listed"]):
-        msg = f"endpoint for {profile_name} is not healthy ({health.get('error') or health}); run `qwen status {profile_name}`."
+        msg = f"endpoint for {profile_name} is not healthy ({health.get('error') or health}); run `qwenbench status {profile_name}`."
         log_dispatch(project, event="dispatch-unavailable", dispatch_id=dispatch_id, role=req.role, profile=profile_name,
                      health=health)
         return _refusal(req, dispatch_id, "endpoint_unavailable", msg, retryable=True), 4

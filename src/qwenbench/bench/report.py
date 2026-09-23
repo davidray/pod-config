@@ -205,7 +205,7 @@ def _md_table(headers: list[str], rows: list[list[Any]]) -> str:
 
 def subjective_section(run: RunData) -> str:
     if not run.subjective:
-        return "_No subjective evaluations recorded. Use `qwen bench evaluate`._"
+        return "_No subjective evaluations recorded. Use `qwenbench bench evaluate`._"
     rows = [[s["case_id"], s["trial"], *[s["scores"].get(k, "-") for k in SUBJECTIVE_KEYS], s.get("notes", "")]
             for s in run.subjective]
     return _md_table(["case", "trial", *SUBJECTIVE_KEYS, "notes"], rows)

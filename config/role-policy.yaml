@@ -80,7 +80,7 @@ enforcement:
   unknown_agents: deny
   # While routing is enforced, the frontier side (main thread + design/review
   # subagents) may only write these paths. Everything else is implementation
-  # and must go through `qwen dispatch`.
+  # and must go through `qwenbench dispatch`.
   frontier_writable:
     - ".hero/**"
     - "docs/**"

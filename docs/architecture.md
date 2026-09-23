@@ -15,7 +15,7 @@
                         session/spend watchdog, /status)    deny Claude editing implementation files
                       + network volume (HF cache)                     │
             │                   ▲                                     ▼
-            │                   │ OpenAI-compatible HTTPS    qwen dispatch (hero/dispatch.py)
+            │                   │ OpenAI-compatible HTTPS    qwenbench dispatch (hero/dispatch.py)
             │                   │                                     │
             │           ChatClient (metrics/llm.py) ◄───── agent loop (agent/loop.py)
             │           TTFT, tokens, cache hits,          tools (agent/tools.py) in an OS
@@ -31,7 +31,7 @@
 **Compute** (`src/qwenbench/runpod/`). `RunpodPodsProvider` implements the
 `ComputeProvider` interface in `providers/base.py` over Runpod REST v2.
 `podspec.py` renders a profile into the exact `vllm serve` argv and the
-`CreatePodRequest`. `qwen infra render` commits that rendering, secrets
+`CreatePodRequest`. `qwenbench infra render` commits that rendering, secrets
 excluded, to `infra/runpod/rendered/`, and a test fails on drift.
 
 **In-pod supervisor** (`containers/qwen-vllm/supervisor.py`). It is stdlib

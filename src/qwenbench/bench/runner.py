@@ -336,7 +336,7 @@ def write_json(path: Path, data: Any) -> None:
 
 
 def copy_reference(case: Case, ws: wsmod.Workspace) -> bool:
-    """Apply benchmarks/tasks/<id>/reference.patch (for `qwen bench verify-cases`)."""
+    """Apply benchmarks/tasks/<id>/reference.patch (for `qwenbench bench verify-cases`)."""
     patch = case.case_dir / "reference.patch"
     if not patch.exists():
         return False

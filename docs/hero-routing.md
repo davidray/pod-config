@@ -17,12 +17,12 @@ brownfield-architect --------> design    --------------------> "claude-opus-5-5"
 ```
 
 Change the Qwen GPU for a project by changing one value
-(`qwen hero configure DIR --execution-profile l40s`). Reclassify an agent in
+(`qwenbench hero configure DIR --execution-profile l40s`). Reclassify an agent in
 `role-policy.yaml`. Agents that are not classified, such as a new agent added
 by a future `hero upgrade`, are **denied** until you classify them;
-`qwen hero inspect` lists them.
+`qwenbench hero inspect` lists them.
 
-## What `qwen hero configure` changes
+## What `qwenbench hero configure` changes
 
 Always with a diff first, and a backup (`*.qwenbench.bak`) of anything it overwrites:
 
@@ -53,16 +53,16 @@ would need an Anthropic-API translation proxy, and would also turn the
 *orchestrator* into Qwen. So "Qwen performs the engineer role" cannot be a
 Claude subagent setting. Instead:
 
-1. **PreToolUse hook on `Agent`/`Task`.** Spawning a Qwen-routed agent such as `engineer` or `api-engineer` is **denied**. The denial message tells Claude exactly how to delegate: `qwen dispatch --project … --role … --task-file …`. The loophole agents (`general-purpose`, `claude`) and unclassified agents are denied too. Design and review agents are allowed.
+1. **PreToolUse hook on `Agent`/`Task`.** Spawning a Qwen-routed agent such as `engineer` or `api-engineer` is **denied**. The denial message tells Claude exactly how to delegate: `qwenbench dispatch --project … --role … --task-file …`. The loophole agents (`general-purpose`, `claude`) and unclassified agents are denied too. Design and review agents are allowed.
 2. **PreToolUse hook on `Edit`/`Write`/`MultiEdit`/`NotebookEdit`.** The main thread and design/review subagents (identified by the hook's `agent_type` field) may write only specs and docs (`.hero/**`, `docs/**`, `*.md`). Implementation files are denied, with the same instruction to dispatch. Routing configuration (`.claude/settings*.json`, `.hero/hero.local.json`, `.qwen-routing/**`) is protected from Claude entirely.
-3. **PreToolUse hook on `Bash`.** It denies `qwen override …`, because overrides are human-only. It also denies shell writes into implementation files: redirects, `tee`, `sed -i`/`perl -i`, `git apply`/`am`, `patch`, `git checkout -- path`. Everything else, such as running tests or `qwen dispatch`, is allowed.
-4. **`qwen dispatch`** runs the role on Qwen, in an OS sandbox confined to the project. Routing config inside the project is write-protected from the Qwen agent too. The call returns a JSON `DispatchResult` ([agent-protocol.md](agent-protocol.md)).
+3. **PreToolUse hook on `Bash`.** It denies `qwenbench override …`, because overrides are human-only. It also denies shell writes into implementation files: redirects, `tee`, `sed -i`/`perl -i`, `git apply`/`am`, `patch`, `git checkout -- path`. Everything else, such as running tests or `qwenbench dispatch`, is allowed.
+4. **`qwenbench dispatch`** runs the role on Qwen, in an OS sandbox confined to the project. Routing config inside the project is write-protected from the Qwen agent too. The call returns a JSON `DispatchResult` ([agent-protocol.md](agent-protocol.md)).
    - It **refuses** frontier roles (exit 3).
    - It **fails fast** if the endpoint is down or unhealthy (exit 4, `endpoint_unavailable`). It never falls back.
    - It stops after `max_attempts_per_task` dispatches of the same task (exit 5): "surface the failure to the human; do not implement it with Claude".
    - Validation is run by the harness. A model claiming success when tests fail is reported as `validation_failed`.
 5. **SessionStart hook.** Injects the routing policy into Claude's context and snapshots the working tree as the session baseline.
-6. **Stop hook and `qwen hero audit`.** Every file changed since the baseline must match, blob for blob, the content some Qwen dispatch produced. Anything else is flagged as **unattributed**. This catches edits the Bash heuristics could not see.
+6. **Stop hook and `qwenbench hero audit`.** Every file changed since the baseline must match, blob for blob, the content some Qwen dispatch produced. Anything else is flagged as **unattributed**. This catches edits the Bash heuristics could not see.
 
 The hooks fail closed: if qwenbench's config cannot load, Agent and Edit calls
 are denied.
@@ -70,7 +70,7 @@ are denied.
 ## Proving which model did what
 
 ```bash
-qwen hero audit ~/code/myproject          # or --json
+qwenbench hero audit ~/code/myproject          # or --json
 ```
 
 - `.qwen-routing/ledger.jsonl` holds every dispatch: role, route, served model name observed in responses, profile, pod id, GPU, files and their blob SHAs, metrics.
@@ -84,11 +84,11 @@ GPU is unavailable and the fix is urgent:
 
 ```bash
 # in YOUR terminal (it refuses without a TTY and asks you to type the role name)
-qwen override grant --project ~/code/myproject --role engineer --ttl 1h \
+qwenbench override grant --project ~/code/myproject --role engineer --ttl 1h \
      --reason "Runpod out of A6000 capacity; hotfix"
-qwen override grant --project ~/code/myproject --role '*' --scope edits --ttl 30m --reason "..."
-qwen override list --project ~/code/myproject
-qwen override revoke --project ~/code/myproject
+qwenbench override grant --project ~/code/myproject --role '*' --scope edits --ttl 30m --reason "..."
+qwenbench override list --project ~/code/myproject
+qwenbench override revoke --project ~/code/myproject
 ```
 
 - `--scope agent` lets Claude spawn that role as a Claude subagent.
@@ -96,24 +96,24 @@ qwen override revoke --project ~/code/myproject
 
 Overrides expire, live outside the project where agents cannot write them, and
 are logged in both the project ledger and the global event log. Claude cannot
-grant one: the Bash hook denies `qwen override`, and the command itself
+grant one: the Bash hook denies `qwenbench override`, and the command itself
 requires an interactive TTY.
 
 ## Limits (honest)
 
-- The Bash write detection is heuristic. A determined agent could write a file through, say, a Python one-liner. That is why the Stop hook and `qwen hero audit` check content attribution: such edits are reported, not silently accepted.
+- The Bash write detection is heuristic. A determined agent could write a file through, say, a Python one-liner. That is why the Stop hook and `qwenbench hero audit` check content attribution: such edits are reported, not silently accepted.
 - Hooks govern Claude Code sessions in the configured project. Other tools such as Cursor or Codex are not covered.
-- Hero workflows that tell Claude to spawn `engineer` get a denial whose reason spells out the `qwen dispatch` command, and CLAUDE.local.md plus the SessionStart context say the same. Whether Claude reliably follows that path (rather than stopping to ask) is something to observe in the first real sessions. Either outcome is safe: the work does not silently happen on Claude. Hero's own prompt text is not modified, by design.
+- Hero workflows that tell Claude to spawn `engineer` get a denial whose reason spells out the `qwenbench dispatch` command, and CLAUDE.local.md plus the SessionStart context say the same. Whether Claude reliably follows that path (rather than stopping to ask) is something to observe in the first real sessions. Either outcome is safe: the work does not silently happen on Claude. Hero's own prompt text is not modified, by design.
 - The dispatch agent sandbox has no network by default. Enable it per project in `.qwen-routing/config.json` (`sandbox.network`, `sandbox.real_home`, `sandbox.extra_writable`) if your tests need it.
 
 ## Setup summary
 
 ```bash
-qwen up a6000
-qwen hero inspect   ~/code/myproject
-qwen hero configure ~/code/myproject --execution-profile a6000
-qwen hero verify    ~/code/myproject
+qwenbench up a6000
+qwenbench hero inspect   ~/code/myproject
+qwenbench hero configure ~/code/myproject --execution-profile a6000
+qwenbench hero verify    ~/code/myproject
 # ...use Claude Code with Hero as usual...
-qwen hero audit     ~/code/myproject
-qwen hero unconfigure ~/code/myproject    # stop enforcing; evidence is kept
+qwenbench hero audit     ~/code/myproject
+qwenbench hero unconfigure ~/code/myproject    # stop enforcing; evidence is kept
 ```

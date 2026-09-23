@@ -9,7 +9,7 @@ Status: accepted (2026-09-23)
   - `restore` resets protected paths, such as the tests the agent must not weaken
   - `overlay` adds hidden tests
   - afterwards the workspace is reset to the agent's result tree, so the recorded diff and any retry never include hidden tests
-- **Case verification.** `qwen bench verify-cases` proves each case discriminates: the base fails and `reference.patch` passes. It caught a weak reference test during development through the mutation check.
+- **Case verification.** `qwenbench bench verify-cases` proves each case discriminates: the base fails and `reference.patch` passes. It caught a weak reference test during development through the mutation check.
 - **Comparability.** Model revision, image, argv, generation, agent SHA plus a dirty flag, prompt hashes and starting commits go into `run.json`. `compare` lists every difference instead of silently comparing.
 
 ## Consequences
