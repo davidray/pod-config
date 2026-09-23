@@ -1,0 +1,39 @@
+# Model + serving runtime definitions. Everything that affects benchmark
+# comparability is pinned here and copied verbatim into every run.json.
+# Verified 2026-09-23; see docs/adr/0003 and docs/adr/0010.
+models:
+  qwen3-coder-30b-fp8:
+    hf_repo: Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8
+    # HF commit SHA (https://huggingface.co/api/models/Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8 -> sha)
+    revision: dcaee4d4dfc5ee71ad501f01f530e5652438fde0
+    served_model_name: qwen3-coder-30b-a3b-fp8
+    quantization: fp8-block-128 (e4m3, dynamic activations)
+    size_gb: 31.2
+    gated: false                      # HF_TOKEN optional (only helps rate limits)
+    # CUDA 12.9 build rather than the CUDA 13 default: CUDA 13 needs host
+    # driver >= 580, which not every Runpod host has. Pinned by digest.
+    image: vllm/vllm-openai:v0.30.0-cu129@sha256:a67f8f186d4567612ac37a55bd82295006002b18858eb12a8af2f05f86c2ae3f
+    vllm_version: 0.30.0
+    cuda_version: "12.9"
+    runtime:
+      max_model_len: 65536
+      gpu_memory_utilization: 0.90
+      enable_prefix_caching: true     # default-on in vLLM V1; explicit for the record
+      tensor_parallel_size: 1
+      kv_cache_dtype: auto            # bf16 KV: 64K ctx = 6 GiB; fits on both 48 GB cards
+      max_num_seqs: 16
+      tool_call_parser: qwen3_coder
+      enable_auto_tool_choice: true
+      enable_prompt_tokens_details: true   # needed for usage.prompt_tokens_details.cached_tokens
+      extra_args: []
+    # Benchmark generation settings. These are Qwen's published recommendations
+    # (model card / generation_config.json) with a fixed seed so runs are
+    # controlled. Greedy decoding is NOT used: Qwen3-Coder is prone to
+    # repetition loops at temperature 0 in long agentic sessions.
+    generation:
+      temperature: 0.7
+      top_p: 0.8
+      top_k: 20
+      repetition_penalty: 1.05
+      max_tokens: 8192
+      seed: 1234

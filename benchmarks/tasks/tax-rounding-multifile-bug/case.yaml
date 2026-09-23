@@ -1,0 +1,24 @@
+id: tax-rounding-multifile-bug
+title: Diagnose and fix a cross-module rounding bug from an accounting report
+category: multi-file-bug
+source:
+  path: ../../fixtures/ledgerlite
+setup:
+  - uv venv -q .venv --python 3.12
+  - uv pip install -q --python .venv/bin/python -r requirements-dev.txt
+task:
+  role: engineer
+  prompt_file: prompt.md
+  acceptance_criteria:
+    - The example invoice produces subtotal 0.52, tax 0.11, total 0.63
+    - Rounding follows the documented policy everywhere
+    - A regression test reproduces the report
+agent_validation:
+  - .venv/bin/python -m pytest -q
+validation:
+  overlay: hidden
+  commands:
+    - .venv/bin/python -m pytest -q
+limits:
+  timeout: 25m
+  max_iterations: 60

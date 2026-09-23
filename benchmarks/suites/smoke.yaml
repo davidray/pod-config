@@ -1,0 +1,6 @@
+name: smoke
+description: One quick case to verify an endpoint end to end before a full run.
+cases:
+  - fix-pagination-regression
+defaults:
+  max_attempts: 1

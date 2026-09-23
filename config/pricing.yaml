@@ -1,0 +1,28 @@
+# Pricing assumptions used ONLY when authoritative data is unavailable.
+#
+# Precedence (see docs/COSTS.md):
+#   1. Runpod billing API  (GET /v2/billing/pods?podId=...)   -> "authoritative"
+#   2. Pod's live `cost` field (USD/hr) x observed runtime       -> "observed-rate estimate"
+#   3. The list prices below x observed runtime                  -> "list-price estimate"
+#
+# Update these without touching code. `as_of` is shown next to every estimate.
+as_of: "2026-09-23"
+source: "Runpod GraphQL gpuTypes securePrice/communityPrice + https://docs.runpod.io/pods/pricing"
+currency: USD
+
+gpu_hourly:
+  "NVIDIA RTX A6000":
+    SECURE: 0.53
+    COMMUNITY: 0.33
+  "NVIDIA L40S":
+    SECURE: 1.09
+    COMMUNITY: 0.79
+
+storage_monthly_per_gb:
+  network_volume: 0.07        # < 1 TB; billed continuously whether or not a pod runs
+  network_volume_over_1tb: 0.05
+  container_disk: 0.10        # only while the pod is running
+  volume_disk_running: 0.10
+  volume_disk_stopped: 0.20
+
+hours_per_month: 730

@@ -1,0 +1,76 @@
+diff --git a/src/ledgerlite/discounts.py b/src/ledgerlite/discounts.py
+new file mode 100644
+index 0000000..8f2040a
+--- /dev/null
++++ b/src/ledgerlite/discounts.py
+@@ -0,0 +1,34 @@
++"""Discount strategies, keyed by Discount.kind."""
++
++from __future__ import annotations
++
++from collections.abc import Callable
++from decimal import Decimal
++
++from ledgerlite.models import Invoice
++from ledgerlite.money import Money
++
++Strategy = Callable[[Invoice, Money], Money]
++
++
++def percent(invoice: Invoice, base: Money) -> Money:
++    d = invoice.discount
++    if not (Decimal("0") <= d.value <= Decimal("100")):
++        raise ValueError("percent discount must be between 0 and 100")
++    return base.times(d.value / Decimal("100")).rounded()
++
++
++def fixed(invoice: Invoice, base: Money) -> Money:
++    amount = Money(invoice.discount.value, invoice.currency)
++    # A fixed discount can never exceed the invoice amount.
++    return amount if amount.amount <= base.amount else base
++
++
++def bulk(invoice: Invoice, base: Money) -> Money:
++    d = invoice.discount
++    if invoice.total_quantity() >= d.min_quantity:
++        return base.times(d.value / Decimal("100")).rounded()
++    return Money.zero(invoice.currency)
++
++
++DISCOUNT_STRATEGIES: dict[str, Strategy] = {"percent": percent, "fixed": fixed, "bulk": bulk}
+diff --git a/src/ledgerlite/pricing.py b/src/ledgerlite/pricing.py
+index 9285573..b662e22 100644
+--- a/src/ledgerlite/pricing.py
++++ b/src/ledgerlite/pricing.py
+@@ -5,6 +5,7 @@ from __future__ import annotations
+ from dataclasses import dataclass
+ from decimal import Decimal
+ 
++from ledgerlite.discounts import DISCOUNT_STRATEGIES
+ from ledgerlite.models import Invoice
+ from ledgerlite.money import Money, total
+ from ledgerlite.tax import invoice_tax
+@@ -26,20 +27,10 @@ def discount_amount(invoice: Invoice, base: Money) -> Money:
+     d = invoice.discount
+     if d is None:
+         return Money.zero(invoice.currency)
+-    if d.kind == "percent":
+-        if not (Decimal("0") <= d.value <= Decimal("100")):
+-            raise ValueError("percent discount must be between 0 and 100")
+-        return base.times(d.value / Decimal("100")).rounded()
+-    elif d.kind == "fixed":
+-        amount = Money(d.value, invoice.currency)
+-        # A fixed discount can never exceed the invoice amount.
+-        return amount if amount.amount <= base.amount else base
+-    elif d.kind == "bulk":
+-        if invoice.total_quantity() >= d.min_quantity:
+-            return base.times(d.value / Decimal("100")).rounded()
+-        return Money.zero(invoice.currency)
+-    else:
++    strategy = DISCOUNT_STRATEGIES.get(d.kind)
++    if strategy is None:
+         raise ValueError(f"unknown discount kind {d.kind!r}")
++    return strategy(invoice, base)
+ 
+ 
+ def compute_totals(invoice: Invoice) -> Totals:

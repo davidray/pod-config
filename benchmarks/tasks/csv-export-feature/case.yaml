@@ -1,0 +1,26 @@
+id: csv-export-feature
+title: Implement CSV export from a written spec
+category: feature-from-spec
+source:
+  path: ../../fixtures/ledgerlite
+setup:
+  - uv venv -q .venv --python 3.12
+  - uv pip install -q --python .venv/bin/python -r requirements-dev.txt
+task:
+  role: engineer
+  prompt_file: prompt.md
+  acceptance_criteria:
+    - "`ledgerlite export --format csv` prints CSV"
+    - CsvExporter lives in src/ledgerlite/exporters/csv_exporter.py and is registered as "csv"
+    - Header row and column order match the JSON exporter's row keys
+    - Values containing commas or quotes are quoted per RFC 4180; lines end with "\n"
+    - New tests cover the exporter
+agent_validation:
+  - .venv/bin/python -m pytest -q
+validation:
+  overlay: hidden
+  commands:
+    - .venv/bin/python -m pytest -q
+limits:
+  timeout: 20m
+  max_iterations: 50

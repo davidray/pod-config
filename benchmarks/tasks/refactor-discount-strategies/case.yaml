@@ -1,0 +1,26 @@
+id: refactor-discount-strategies
+title: Refactor discount if/elif chain into a strategy registry
+category: refactor
+source:
+  path: ../../fixtures/ledgerlite
+setup:
+  - uv venv -q .venv --python 3.12
+  - uv pip install -q --python .venv/bin/python -r requirements-dev.txt
+task:
+  role: engineer
+  prompt_file: prompt.md
+  acceptance_criteria:
+    - New module src/ledgerlite/discounts.py exposes DISCOUNT_STRATEGIES
+    - pricing.discount_amount delegates to the registry; no per-kind branching left in pricing.py
+    - Behavior and error types are unchanged; existing tests pass unmodified
+agent_validation:
+  - .venv/bin/python -m pytest -q
+validation:
+  restore: [tests/test_pricing.py, tests/test_money.py, tests/test_cli.py, tests/test_repository.py]
+  overlay: hidden
+  commands:
+    - .venv/bin/python -m pytest -q
+    - "! grep -nE 'kind *==' src/ledgerlite/pricing.py"
+limits:
+  timeout: 20m
+  max_iterations: 50

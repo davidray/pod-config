@@ -1,0 +1,49 @@
+[project]
+name = "qwenbench"
+version = "0.1.0"
+description = "Reproducible Runpod Qwen3-Coder provisioning, benchmarking, and Hero/Claude Code routing"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+  "httpx>=0.27,<1",
+  "pydantic>=2.7,<3",
+  "pyyaml>=6,<7",
+  "rich>=13,<15",
+  "typer>=0.12,<1",
+]
+
+[project.scripts]
+qwen = "qwenbench.cli.main:app"
+
+[dependency-groups]
+dev = [
+  "pytest>=8",
+  "ruff>=0.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/qwenbench"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "integration: talks to paid Runpod resources; requires QWEN_RUNPOD_INTEGRATION=1",
+  "slow: spawns processes or runs real test suites (seconds, not minutes)",
+]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/qwenbench/cli/*" = ["B008"]  # typer's declarative defaults

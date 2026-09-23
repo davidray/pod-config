@@ -1,0 +1,25 @@
+id: fix-pagination-regression
+title: Fix the pagination regression that hides the last partial page
+category: fix-failing-test
+source:
+  path: ../../fixtures/ledgerlite
+  overlay: seed            # adds the failing regression test to the starting commit
+setup:
+  - uv venv -q .venv --python 3.12
+  - uv pip install -q --python .venv/bin/python -r requirements-dev.txt
+task:
+  role: engineer
+  prompt_file: prompt.md
+  acceptance_criteria:
+    - tests/test_pagination.py passes without modifying it
+    - Page.total_pages and has_next are correct for partial last pages, exact multiples and empty lists
+agent_validation:
+  - .venv/bin/python -m pytest -q
+validation:
+  restore: [tests/test_pagination.py]
+  overlay: hidden
+  commands:
+    - .venv/bin/python -m pytest -q
+limits:
+  timeout: 15m
+  max_iterations: 40
