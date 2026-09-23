@@ -1,6 +1,6 @@
 ---
 user: david-christiansen
-updated: 2026-09-23T14:33:46Z
+updated: 2026-09-23T15:05:17Z
 repo: davidray/pod-config
 ---
 
@@ -15,6 +15,8 @@ repo: davidray/pod-config
 > Create a repository that lets me reproducibly:
 > 
 > 1. Provision a Runpod A6000 environm…
+
+_possibly stale — 1 commit(s) since, last set 10m ago_
 
 ## Suggested next prompt
 

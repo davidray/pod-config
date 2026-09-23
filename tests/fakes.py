@@ -170,7 +170,7 @@ class FakeRunpod:
                                              "pagination": {"nextCursor": None, "hasNextPage": False}})
         if path == "/v2/pods" and method == "POST":
             body = json.loads(request.content)
-            dc = (body.get("dataCenterIds") or ["?"])[0]
+            dc = (body.get("dataCenterIds") or ["ANY"])[0]
             if dc in self.capacity_errors:
                 return httpx.Response(400, json={"title": "Bad Request", "status": 400,
                                                  "detail": f"no {body['gpu']['id']} available in {dc}"})

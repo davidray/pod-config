@@ -192,7 +192,9 @@ class RunpodPodsProvider:
         api_key = pysecrets.token_urlsafe(32)
         env = podspec.pod_env(profile, endpoint_api_key=api_key, list_cost_per_hr=list_rate,
                               hf_token=get_secret("HF_TOKEN"))
-        candidates = [vol.data_center] if vol else self.available_data_centers(profile)
+        # A volume pins the data center. Without one, try the preferred data
+        # centers first, then let Runpod place the pod anywhere with stock.
+        candidates = [vol.data_center] if vol else [*self.available_data_centers(profile), None]
 
         machine = ReadinessMachine(profile.startup_timeout_s, clock=self.clock)
         pod = self._create(profile, env, candidates, vol, progress)

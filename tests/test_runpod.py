@@ -306,3 +306,14 @@ def test_no_stock_does_not_create_a_billed_volume(cfg, patch_model_transport):
     with pytest.raises(ProvisionError, match="no availability"):
         prov.up(cfg.profile("a6000"))
     assert not fake.volumes and not fake.created
+
+
+def test_ephemeral_falls_back_to_any_data_center(cfg, patch_model_transport):
+    fake = FakeRunpod(capacity_errors={"EU-RO-1", "CA-MTL-3"})
+    t = ready_transport()
+    patch_model_transport(t)
+    prov, _ = provider(cfg, fake, t)
+    p = cfg.profile("a6000")
+    p = p.model_copy(update={"storage": p.storage.model_copy(update={"mode": "ephemeral"})})
+    prov.up(p)
+    assert fake.created[0]["dataCenterIds"] == []  # scheduler's choice
