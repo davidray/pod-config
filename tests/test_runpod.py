@@ -364,3 +364,13 @@ def test_up_warns_when_pod_cannot_stop_itself(cfg, patch_model_transport):
     prov.up(cfg.profile("a6000"), progress=msgs.append)
     assert any("cannot stop it" in m for m in msgs)
     assert any(e["event"] == "self-stop-unavailable" for e in read_events())
+
+
+def test_billing_always_sends_start_and_end():
+    seen = {}
+
+    def handler(req):
+        seen.update(req.url.params)
+        return httpx.Response(200, json={"records": [], "metadata": {"totals": {}}})
+    RunpodClient("k" * 20, transport=httpx.MockTransport(handler)).pod_billing("p", "2026-09-23T17:00:00Z")
+    assert seen["startTime"] == "2026-09-23T17:00:00Z" and seen["endTime"]
