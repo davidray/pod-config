@@ -1,0 +1,15 @@
+name: daveeval
+description: >
+  Routine implementation work on a realistic repository: fix a failing test,
+  implement from a spec, refactor, diagnose a multi-file bug, explore to add a
+  cross-cutting option, and add tests for existing behavior. Swap in cases
+  from your own repositories (see docs/benchmarking.md) as you build trust.
+cases:
+  - fix-pagination-regression
+  - csv-export-feature
+  - refactor-discount-strategies
+  - tax-rounding-multifile-bug
+  - aging-report-tests
+  - cli-customer-filter
+defaults:
+  max_attempts: 2      # a failed validation is fed back once; attempt 1 success = first-pass

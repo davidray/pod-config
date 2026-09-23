@@ -1,0 +1,79 @@
+diff --git a/src/ledgerlite/cli.py b/src/ledgerlite/cli.py
+index 25dfbd6..b3f4d5a 100644
+--- a/src/ledgerlite/cli.py
++++ b/src/ledgerlite/cli.py
+@@ -23,9 +23,18 @@ def build_repository(path: str | None) -> InvoiceRepository:
+     return repo
+ 
+ 
++def known_customer(repo: InvoiceRepository, customer_id: str) -> bool:
++    if repo.for_customer(customer_id):
++        return True
++    print(f"unknown customer: {customer_id}", file=sys.stderr)
++    return False
++
++
+ def cmd_export(args: argparse.Namespace) -> int:
+     repo = build_repository(args.data)
+-    invoices = repo.all()
++    if args.customer and not known_customer(repo, args.customer):
++        return 2
++    invoices = repo.for_customer(args.customer) if args.customer else repo.all()
+     if args.status:
+         invoices = [i for i in invoices if i.status == InvoiceStatus(args.status)]
+     sys.stdout.write(get_exporter(args.format).export(invoices))
+@@ -35,7 +44,9 @@ def cmd_export(args: argparse.Namespace) -> int:
+ 
+ def cmd_list(args: argparse.Namespace) -> int:
+     repo = build_repository(args.data)
+-    page = repo.list(page=args.page, per_page=args.per_page)
++    if args.customer and not known_customer(repo, args.customer):
++        return 2
++    page = repo.list(page=args.page, per_page=args.per_page, customer_id=args.customer)
+     for inv in page.items:
+         print(f"{inv.number}\t{inv.customer.name}\t{inv.status.value}")
+     print(f"-- page {page.page}/{page.total_pages} ({page.total_items} invoices)")
+@@ -50,11 +61,13 @@ def make_parser() -> argparse.ArgumentParser:
+     exp = sub.add_parser("export", help="export invoices")
+     exp.add_argument("--format", choices=sorted(EXPORTERS), default="json")
+     exp.add_argument("--status", choices=[s.value for s in InvoiceStatus])
++    exp.add_argument("--customer", help="only this customer id")
+     exp.set_defaults(func=cmd_export)
+ 
+     lst = sub.add_parser("list", help="list invoices")
+     lst.add_argument("--page", type=int, default=1)
+     lst.add_argument("--per-page", type=int, default=20)
++    lst.add_argument("--customer", help="only this customer id")
+     lst.set_defaults(func=cmd_list)
+     return parser
+ 
+diff --git a/src/ledgerlite/repository.py b/src/ledgerlite/repository.py
+index a91b61f..6b6abb1 100644
+--- a/src/ledgerlite/repository.py
++++ b/src/ledgerlite/repository.py
+@@ -25,8 +25,12 @@ class InvoiceRepository:
+     def all(self) -> list[Invoice]:
+         return sorted(self._invoices.values(), key=lambda i: (i.issued, i.number))
+ 
+-    def list(self, page: int = 1, per_page: int = 20, status: InvoiceStatus | None = None) -> Page[Invoice]:
+-        rows = self.all()
++    def for_customer(self, customer_id: str) -> list[Invoice]:
++        return [i for i in self.all() if i.customer.id == customer_id]
++
++    def list(self, page: int = 1, per_page: int = 20, status: InvoiceStatus | None = None,
++             customer_id: str | None = None) -> Page[Invoice]:
++        rows = self.for_customer(customer_id) if customer_id else self.all()
+         if status is not None:
+             rows = [i for i in rows if i.status == status]
+         return paginate(rows, page=page, per_page=per_page)
+diff --git a/tests/test_customer_filter.py b/tests/test_customer_filter.py
+new file mode 100644
+index 0000000..d59ddc9
+--- /dev/null
++++ b/tests/test_customer_filter.py
+@@ -0,0 +1,5 @@
++from ledgerlite.cli import main
++
++
++def test_unknown_customer_exit_code(capsys):
++    assert main(["list", "--customer", "nope"]) == 2

@@ -1,0 +1,63 @@
+diff --git a/src/ledgerlite/money.py b/src/ledgerlite/money.py
+index 99af1ff..558814f 100644
+--- a/src/ledgerlite/money.py
++++ b/src/ledgerlite/money.py
+@@ -3,7 +3,7 @@
+ from __future__ import annotations
+ 
+ from dataclasses import dataclass
+-from decimal import ROUND_HALF_EVEN, Decimal
++from decimal import ROUND_HALF_UP, Decimal
+ 
+ CENT = Decimal("0.01")
+ 
+@@ -41,8 +41,8 @@ class Money:
+         return Money(self.amount * Decimal(str(factor)), self.currency)
+ 
+     def rounded(self) -> Money:
+-        """Round to whole cents."""
+-        return Money(self.amount.quantize(CENT, rounding=ROUND_HALF_EVEN), self.currency)
++        """Round to whole cents, half-up (commercial rounding)."""
++        return Money(self.amount.quantize(CENT, rounding=ROUND_HALF_UP), self.currency)
+ 
+     def is_negative(self) -> bool:
+         return self.amount < 0
+diff --git a/src/ledgerlite/tax.py b/src/ledgerlite/tax.py
+index eb1810c..5e4878d 100644
+--- a/src/ledgerlite/tax.py
++++ b/src/ledgerlite/tax.py
+@@ -35,5 +35,5 @@ def invoice_tax(invoice: Invoice, discount_ratio: Decimal = Decimal("1")) -> Mon
+     applies (tax is charged on the discounted price).
+     """
+     rate = rate_for(invoice.customer.region)
+-    taxable = total([i.line_total() for i in invoice.items if i.taxable], invoice.currency)
++    taxable = total([i.line_total().rounded() for i in invoice.items if i.taxable], invoice.currency)
+     return taxable.times(discount_ratio).times(rate).rounded()
+diff --git a/tests/test_money.py b/tests/test_money.py
+index 1a375ce..0656bf5 100644
+--- a/tests/test_money.py
++++ b/tests/test_money.py
+@@ -17,7 +17,7 @@ def test_currency_mismatch():
+ 
+ def test_times_and_rounding():
+     assert Money.of("19.99").times(3).rounded() == Money.of("59.97")
+-    assert Money.of("10").times(Decimal("0.0725")).rounded() == Money.of("0.72")
++    assert Money.of("10").times(Decimal("0.0725")).rounded() == Money.of("0.73")  # half-up per README
+ 
+ 
+ def test_total_and_str():
+diff --git a/tests/test_rounding_regression.py b/tests/test_rounding_regression.py
+new file mode 100644
+index 0000000..974de5b
+--- /dev/null
++++ b/tests/test_rounding_regression.py
+@@ -0,0 +1,9 @@
++from ledgerlite.models import Customer
++from ledgerlite.money import Money
++from ledgerlite.pricing import compute_totals
++
++
++def test_accounting_report_example(invoice_factory):
++    inv = invoice_factory(customer=Customer(id="n", name="NL", region="EU-NL"), items=[("S", 1, "0.125")] * 4)
++    t = compute_totals(inv)
++    assert (t.subtotal, t.tax, t.grand_total) == (Money.of("0.52"), Money.of("0.11"), Money.of("0.63"))

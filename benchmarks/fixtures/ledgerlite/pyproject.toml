@@ -1,0 +1,13 @@
+[project]
+name = "ledgerlite"
+version = "0.4.2"
+description = "Tiny invoicing library used as a qwenbench benchmark fixture"
+requires-python = ">=3.11"
+
+[project.scripts]
+ledgerlite = "ledgerlite.cli:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"

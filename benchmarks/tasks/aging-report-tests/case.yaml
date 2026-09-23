@@ -1,0 +1,28 @@
+id: aging-report-tests
+title: Add tests for the untested aging report
+category: add-tests
+source:
+  path: ../../fixtures/ledgerlite
+setup:
+  - uv venv -q .venv --python 3.12
+  - uv pip install -q --python .venv/bin/python -r requirements-dev.txt
+task:
+  role: test-architect
+  prompt_file: prompt.md
+  acceptance_criteria:
+    - tests/test_reports.py exists and passes
+    - src/ is not modified
+    - Coverage of ledgerlite.reports >= 95%
+    - The tests catch boundary and filtering mutants (checked by the harness)
+agent_validation:
+  - .venv/bin/python -m pytest -q
+validation:
+  restore: [src/]
+  overlay: hidden
+  commands:
+    - .venv/bin/python -m pytest -q
+    - .venv/bin/python -m pytest -q -p no:cacheprovider --cov=ledgerlite.reports --cov-report=term-missing --cov-fail-under=95 tests/test_reports.py
+    - .venv/bin/python .bench/mutants.py
+limits:
+  timeout: 20m
+  max_iterations: 50

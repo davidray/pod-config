@@ -1,0 +1,56 @@
+diff --git a/src/ledgerlite/exporters/__init__.py b/src/ledgerlite/exporters/__init__.py
+index 6cf87e4..59d36f7 100644
+--- a/src/ledgerlite/exporters/__init__.py
++++ b/src/ledgerlite/exporters/__init__.py
+@@ -7,10 +7,12 @@ To add a format, implement the `Exporter` protocol and register it in
+ from __future__ import annotations
+ 
+ from ledgerlite.exporters.base import Exporter
++from ledgerlite.exporters.csv_exporter import CsvExporter
+ from ledgerlite.exporters.json_exporter import JsonExporter
+ 
+ EXPORTERS: dict[str, type[Exporter]] = {
+     "json": JsonExporter,
++    "csv": CsvExporter,
+ }
+ 
+ 
+diff --git a/src/ledgerlite/exporters/csv_exporter.py b/src/ledgerlite/exporters/csv_exporter.py
+new file mode 100644
+index 0000000..4b3e17b
+--- /dev/null
++++ b/src/ledgerlite/exporters/csv_exporter.py
+@@ -0,0 +1,22 @@
++from __future__ import annotations
++
++import csv
++import io
++
++from ledgerlite.exporters.base import invoice_row
++from ledgerlite.models import Invoice
++
++COLUMNS = ("number", "customer", "region", "issued", "due", "status", "currency",
++           "subtotal", "discount", "tax", "total")
++
++
++class CsvExporter:
++    content_type = "text/csv"
++
++    def export(self, invoices: list[Invoice]) -> str:
++        buf = io.StringIO()
++        writer = csv.DictWriter(buf, fieldnames=COLUMNS, lineterminator="\n")
++        writer.writeheader()
++        for inv in invoices:
++            writer.writerow(invoice_row(inv))
++        return buf.getvalue()
+diff --git a/tests/test_csv_export.py b/tests/test_csv_export.py
+new file mode 100644
+index 0000000..453b225
+--- /dev/null
++++ b/tests/test_csv_export.py
+@@ -0,0 +1,5 @@
++from ledgerlite.exporters.csv_exporter import CsvExporter
++
++
++def test_csv_header_only_for_empty():
++    assert CsvExporter().export([]).startswith("number,customer,")

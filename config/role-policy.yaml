@@ -1,0 +1,102 @@
+# Per-agent model policy for Hero-managed projects.
+#
+# Hero's native `models.roles` has three roles (design / execution / review)
+# and only passes them to agents as hints; Hero agents do not declare which
+# role they belong to (verified against hero v0.34.1, internal/config/config.go
+# and the installed .claude/agents/*.md frontmatter). This file adds exactly
+# that missing granularity: agent -> Hero role. Which *model* serves a role is
+# still read from the project's Hero config (.hero/hero.json overlaid by
+# .hero/hero.local.json), so nothing about Hero's config is duplicated here.
+#
+# See docs/hero-routing.md and docs/adr/0005, 0006.
+version: 1
+
+# How a Hero `models.roles` value is interpreted. First match wins.
+providers:
+  qwen:
+    type: openai-compatible
+    compute: runpod
+    # "qwen:a6000" -> profile a6000; "qwen:l40s" -> profile l40s
+    model_pattern: "^qwen:(?P<profile>[a-z0-9-]+)$"
+  frontier:
+    type: claude
+    model_pattern: "^(claude|anthropic|opus|sonnet|haiku|fable)"
+
+# agent name -> Hero role (design | execution | review), or a direct provider
+# ("frontier" / "qwen") when the agent does not fit Hero's three roles.
+agents:
+  # --- judgment-heavy: stays on Claude via Hero's design/review roles ---
+  product-ideator: design
+  feature-delivery-lead: design
+  platform-delivery-lead: design
+  brownfield-architect: design
+  greenfield-architect: design
+  ui-designer: design
+  debug-investigator: design        # root-cause classification feeds a fix spec
+  dependency-analyst: design
+  convention-author: design
+  project-context-builder: design
+  session-primer: design
+  issue-tracker: design
+  release-engineer: design          # release judgment, not code volume
+  architecture-reviewer: review
+  design-reviewer: review
+  roadmap-reviewer: review
+  security-reviewer: review
+  pr-reviewer: review
+
+  # --- implementation-heavy: Hero execution role -> Qwen ---
+  engineer: execution
+  api-engineer: execution
+  database-engineer: execution
+  integration-engineer: execution
+  migration-engineer: execution
+  performance-engineer: execution
+  devops-engineer: execution
+  documentation-engineer: execution
+  test-architect: execution         # implementation-level tests
+  functional-qa-engineer: execution
+  defensive-scrubber: execution
+  legacy-scrubber: execution
+  dependency-scrubber: execution
+  comment-scrubber: execution
+  deadcode-scrubber: execution
+  dedup-scrubber: execution
+  type-scrubber: execution
+
+# Claude Code built-in subagents. Read-only helpers are harmless; general
+# purpose agents can write code and would be a silent-fallback loophole.
+builtin_agents:
+  Explore: frontier
+  Plan: frontier
+  claude-code-guide: frontier
+  statusline-setup: frontier
+  general-purpose: deny
+  claude: deny
+
+enforcement:
+  # Agents not listed above (e.g. a new agent added by `hero upgrade`) are
+  # denied until classified here. Fail closed, never guess.
+  unknown_agents: deny
+  # While routing is enforced, the frontier side (main thread + design/review
+  # subagents) may only write these paths. Everything else is implementation
+  # and must go through `qwenbench dispatch`.
+  frontier_writable:
+    - ".hero/**"
+    - "docs/**"
+    - "**/*.md"
+    - "**/*.mdx"
+    - "*.md"
+  # Nobody but a human at a terminal may touch these.
+  protected:
+    - ".claude/settings.json"
+    - ".claude/settings.local.json"
+    - ".hero/hero.local.json"
+    - ".qwen-routing/**"
+  dispatch:
+    # Transport-level retries (HTTP 5xx/timeouts) inside one dispatch. A task
+    # that runs and fails is NOT retried automatically.
+    max_request_retries: 3
+    # Whole-dispatch attempts Claude may make for the same task before it must
+    # stop and surface the failure.
+    max_attempts_per_task: 2

@@ -1,0 +1,13 @@
+diff --git a/src/ledgerlite/pagination.py b/src/ledgerlite/pagination.py
+index 1a8ed22..dfbb56b 100644
+--- a/src/ledgerlite/pagination.py
++++ b/src/ledgerlite/pagination.py
+@@ -21,7 +21,7 @@ class Page(Generic[T]):
+     def total_pages(self) -> int:
+         if self.total_items == 0:
+             return 1
+-        return self.total_items // self.per_page
++        return -(-self.total_items // self.per_page)
+ 
+     @property
+     def has_next(self) -> bool:

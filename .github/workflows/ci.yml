@@ -1,0 +1,13 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    # macOS: the agent sandbox tests exercise sandbox-exec; Linux runners lack bwrap by default.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync
+      - run: uv run ruff check src tests
+      - run: uv run qwen infra render --check
+      - run: uv run pytest
