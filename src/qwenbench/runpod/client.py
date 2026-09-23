@@ -199,7 +199,7 @@ class RunpodClient:
         return body.get("dataCenters", body if isinstance(body, list) else [])
 
     def pod_billing(self, pod_id: str, start: str, end: str | None = None, bucket: str = "hour") -> dict:
-        params: dict[str, Any] = {"podId": pod_id, "startTime": start, "bucketSize": bucket}
-        if end:
-            params["endTime"] = end
+        # The API rejects startTime without endTime (400), so default the end to now.
+        end = end or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        params: dict[str, Any] = {"podId": pod_id, "startTime": start, "endTime": end, "bucketSize": bucket}
         return self._request("GET", "/v2/billing/pods", params=params).json()
