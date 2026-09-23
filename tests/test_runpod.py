@@ -97,7 +97,7 @@ def test_create_body_shape(cfg):
     p = cfg.profile("a6000")
     env = podspec.pod_env(p, endpoint_api_key="k" * 30, list_cost_per_hr=0.53, hf_token=FAKE_HF_TOKEN)
     body = podspec.create_body(p, env=env, data_center_ids=["EU-RO-1"], network_volume_id="vol_1")
-    assert body["gpu"] == {"id": "NVIDIA RTX A6000", "count": 1, "minCudaVersion": "12.9"}
+    assert body["gpu"] == {"id": "NVIDIA RTX A6000", "count": 1, "minCudaVersion": "13.0"}
     assert body["mounts"] == {"network": [{"volumeId": "vol_1", "path": "/workspace"}]}
     assert body["ports"] == ["8000/http", "8001/http"] and body["cloud"] == "SECURE"
     assert body["entrypoint"] == ["/bin/bash", "-c"]

@@ -4,7 +4,7 @@
   "vllm_command": "vllm serve Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8 --revision dcaee4d4dfc5ee71ad501f01f530e5652438fde0 --tokenizer-revision dcaee4d4dfc5ee71ad501f01f530e5652438fde0 --served-model-name qwen3-coder-30b-a3b-fp8 --host 0.0.0.0 --port 8000 --max-model-len 65536 --gpu-memory-utilization 0.90 --tensor-parallel-size 1 --kv-cache-dtype auto --max-num-seqs 16 --enable-prefix-caching --enable-auto-tool-choice --tool-call-parser qwen3_coder --enable-prompt-tokens-details",
   "create_pod_request": {
     "name": "qwenbench-l40s",
-    "image": "vllm/vllm-openai:v0.30.0-cu129@sha256:a67f8f186d4567612ac37a55bd82295006002b18858eb12a8af2f05f86c2ae3f",
+    "image": "vllm/vllm-openai:v0.30.0@sha256:8a69ffad015f138d7170c4ddc429e230a3bc1c1719f67e14324749df200a4b90",
     "env": {
       "VLLM_API_KEY": "${VLLM_API_KEY}",
       "QWENBENCH_PROFILE": "l40s",
@@ -30,7 +30,7 @@
     "gpu": {
       "id": "NVIDIA L40S",
       "count": 1,
-      "minCudaVersion": "12.9"
+      "minCudaVersion": "13.0"
     },
     "dataCenterIds": [
       "US-IL-1"

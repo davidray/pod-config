@@ -4,8 +4,8 @@ Status: accepted (2026-09-23)
 
 ## Decision
 - **Model:** `Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8` at HF revision `dcaee4d4dfc5ee71ad501f01f530e5652438fde0`. It is not gated, 31.18 GB in 4 shards, and uses block-128 e4m3 FP8 with dynamic activations.
-- **Serving image:** `vllm/vllm-openai:v0.30.0-cu129`, pinned by digest.
-- **Why CUDA 12.9:** the default v0.30.0 image is CUDA 13, which needs host drivers of 580 or newer. That is not guaranteed across Runpod hosts. Pods request `gpu.minCudaVersion: 12.9`.
+- **Serving image:** `vllm/vllm-openai:v0.30.0` (CUDA 13), pinned by digest. Pods request `gpu.minCudaVersion: 13.0`, i.e. host driver 580 or newer.
+- **Why not the `-cu129` variant (revised 2026-09-23):** it was the original choice, to tolerate hosts with drivers older than 580. On the first real A6000 pod it crashed at import: the image ships `torch 2.14.0+cu130` with a cu129 torchvision (`operator torchvision::nms does not exist`, upstream vllm-project/vllm#56829). The main CUDA 13 build is used instead; Runpod's catalog lists hosts on CUDA 13.0 and 13.2, and the A6000 host we got ran driver 580.159.03.
 - **Why v0.30.0:** it was one day old when chosen. v0.29.0 is the fallback if a regression appears; change `image` and `vllm_version` together.
 
 vLLM flags:
