@@ -56,7 +56,9 @@ def finalize_costs(run_dir: Path, fetch_billing: bool = False) -> dict:
             err.print(f"billing API unavailable ({e}); keeping estimates")
     costs = compute_costs(c.pricing, gpu_type_id=p.gpu_type_id, cloud=p.cloud, gpu_count=p.gpu_count,
                           observed_rate=session.get("cost_per_hr"), observed_rate_source=session.get("cost_source"),
-                          lifetime_s=lifetime, storage_gb=p.storage.size_gb, storage_mode=p.storage.mode,
+                          lifetime_s=lifetime, storage_gb=p.storage.size_gb,
+                          # what the session actually used (`up --storage ephemeral` creates no volume)
+                          storage_mode="network-volume" if session.get("network_volume_id") else "ephemeral",
                           billing_total=billing_total)
     meta["costs"] = costs.to_dict()
     write_json(run_dir / "run.json", meta)

@@ -192,7 +192,8 @@ class RunpodPodsProvider:
         list_rate = self.cfg.pricing.gpu_rate(profile.gpu_type_id, profile.cloud) * profile.gpu_count
         api_key = pysecrets.token_urlsafe(32)
         env = podspec.pod_env(profile, endpoint_api_key=api_key, list_cost_per_hr=list_rate,
-                              hf_token=get_secret("HF_TOKEN"))
+                              hf_token=get_secret("HF_TOKEN"),
+                              self_stop_key=get_secret("RUNPOD_SELF_STOP_API_KEY"))
         # A volume pins the data center. Without one, try the preferred data
         # centers first, then let Runpod place the pod anywhere with stock.
         candidates = [vol.data_center] if vol else [*self.available_data_centers(profile), None]
@@ -320,10 +321,22 @@ class RunpodPodsProvider:
                 save_session(session)
                 log_event("pod-ready", profile=profile.name, pod_id=session.pod_id,
                           startup_s=round(session.ready_at - session.requested_at, 1), phases=session.startup)
+                self._warn_if_pod_cannot_stop_itself(session, progress)
                 return
             if phase in (Phase.FAILED, Phase.TIMED_OUT):
                 raise ProvisionError(machine.failure or phase.name)
             self.sleep(opts.poll_s)
+
+    def _warn_if_pod_cannot_stop_itself(self, session: Session, progress: Progress) -> None:
+        sup = self.supervisor_status(session.watchdog_url, session.api_key) or {}
+        if sup.get("runpod_api_auth_ok") is not False:
+            return
+        log_event("self-stop-unavailable", profile=session.profile, pod_id=session.pod_id,
+                  key_source=sup.get("runpod_api_key_source"))
+        progress("WARNING: the pod cannot call the Runpod API (key source: "
+                 f"{sup.get('runpod_api_key_source')}), so in-pod idle/spend shutdown cannot stop it. "
+                 "Only the local guard can, and only while this machine is awake. "
+                 "Set RUNPOD_SELF_STOP_API_KEY (see docs/runpod-setup.md) to fix.")
 
     def _terminate(self, pod_id: str, profile: str, reason: str) -> bool:
         gone = not self.client.terminate_pod(pod_id)

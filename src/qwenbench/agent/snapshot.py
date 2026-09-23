@@ -10,6 +10,7 @@ deleted files.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -40,9 +41,12 @@ def snapshot(repo: Path) -> str:
     with tempfile.TemporaryDirectory() as tmp:
         index = Path(tmp) / "index"
         # Seed with a copy of the real index so git can reuse its stat cache.
+        # copy2 keeps the index mtime: git's racy-clean check compares file
+        # mtimes against it, and a fresh mtime would make same-size edits made
+        # in the same second as the last index write look unchanged.
         real_index = Path(repo) / _git(repo, "rev-parse", "--git-path", "index").strip()
         if real_index.exists():
-            index.write_bytes(real_index.read_bytes())
+            shutil.copy2(real_index, index)
         env = {"GIT_INDEX_FILE": str(index)}
         _git(repo, "add", "-A", ".", env=env)
         return _git(repo, "write-tree", env=env).strip()

@@ -19,7 +19,19 @@ is also run as a process in tests, idling out against a fake vLLM.
 Idle 30 min, startup 25 min, session 8 h, $10 per session. Idle is disabled
 only by an explicit `--idle-timeout off`, which prints a warning.
 
-## Open item
-Whether the pod-scoped key may terminate its own pod must be confirmed on the
-first real run: `qwenbench status` shows `runpod_api_auth_ok` from the supervisor.
-The guard covers the case where it cannot.
+## Finding from the first real pods (2026-09-23)
+Runpod's injected pod-scoped `RUNPOD_API_KEY` gets **HTTP 403** on
+`GET /v2/pods/{own id}`, so the in-pod supervisor almost certainly cannot stop
+its own pod with it. Without a further key, only the local guard can enforce
+shutdown, and only while the workstation is awake.
+
+Response:
+- An optional `RUNPOD_SELF_STOP_API_KEY` (a separate, restricted Runpod key) is
+  passed to the pod as `QWENBENCH_SELF_STOP_KEY`. The supervisor prefers it.
+- `qwenbench up` warns loudly, and logs `self-stop-unavailable`, whenever the
+  supervisor reports it cannot reach the API. `qwenbench doctor` warns when the
+  key is not set.
+
+Still to validate: which Runpod key permission level is the minimum that allows
+stop/terminate. The first launch with a self-stop key should confirm
+`runpod_api_auth_ok: true` in `qwenbench status`.

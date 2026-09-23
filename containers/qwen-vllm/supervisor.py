@@ -43,7 +43,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 ENV = os.environ
 POD_ID = ENV.get("RUNPOD_POD_ID", "local")
 API_KEY = ENV.get("VLLM_API_KEY", "")  # shared with vLLM; guards /status too
-RUNPOD_KEY = ENV.get("RUNPOD_API_KEY", "")  # pod-scoped key injected by Runpod
+# A dedicated restricted key (QWENBENCH_SELF_STOP_KEY) is preferred: Runpod's
+# injected pod-scoped RUNPOD_API_KEY returned 403 on its own pod (2026-09-23).
+RUNPOD_KEY = ENV.get("QWENBENCH_SELF_STOP_KEY") or ENV.get("RUNPOD_API_KEY", "")
+KEY_SOURCE = "self-stop-key" if ENV.get("QWENBENCH_SELF_STOP_KEY") else "pod-scoped-key"
 PORT = int(ENV.get("QWENBENCH_VLLM_PORT", "8000"))
 WD_PORT = int(ENV.get("QWENBENCH_WATCHDOG_PORT", "8001"))
 STATE_ROOT = ENV.get("QWENBENCH_STATE_ROOT", "/workspace/qwenbench")
@@ -134,6 +137,7 @@ class State:
                 "cost_source": self.cost_source,
                 "estimated_spend_usd": round(self.cost_per_hr * uptime / 3600, 4),
                 "runpod_api_auth_ok": self.api_auth_ok,
+                "runpod_api_key_source": KEY_SOURCE,
                 "vllm_exit_code": self.vllm_exit,
                 "shutdown": self.shutdown,
                 "history": read_history(),
@@ -184,7 +188,7 @@ def probe_api() -> None:
     if status == 200 and body and body.get("cost"):
         STATE.cost_per_hr = float(body["cost"])
         STATE.cost_source = "runpod-pod-cost"
-    log(f"runpod api probe: status={status} cost_per_hr={STATE.cost_per_hr} ({STATE.cost_source})")
+    log(f"runpod api probe ({KEY_SOURCE}): status={status} cost_per_hr={STATE.cost_per_hr} ({STATE.cost_source})")
 
 
 def terminate_self(reason: str, detail: str) -> None:

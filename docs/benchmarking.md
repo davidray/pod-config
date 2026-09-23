@@ -118,3 +118,19 @@ is why `--repeat 3` exists.
 
 plus free-text notes. They go in `subjective.json` and a separate report
 section. They are never blended into objective metrics.
+
+## First real measurement (2026-09-23, smoke suite, RTX A6000 Secure, EU-SE-1)
+
+One trial, not a benchmark result, but it shows the system working end to end:
+
+| | |
+|---|---|
+| Startup (request → verified inference) | 470 s, ephemeral storage (image pull + 31 GB download) |
+| Task | `fix-pagination-regression`: PASS, first attempt, 49 s |
+| Requests / output tokens | 22 / 2,473 (0 failed, 0 retries) |
+| Input tokens | 101,059, of which 95,600 served from prefix cache |
+| Median TTFT / p90 | 0.59 s / 1.28 s (through Runpod's proxy) |
+| Median decode speed | 115 tok/s |
+| GPU lifetime / cost | 8m41s / $0.077 (observed $0.53/hr) |
+
+Qwen's fix used `(n + per_page - 1) // per_page`, equivalent to the reference solution.

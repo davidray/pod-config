@@ -82,6 +82,7 @@ There are two independent layers.
    - **Also:** startup timeout, max session, max spend, and a vLLM crash (with a 5-minute grace period to fetch logs).
    - **How it stops:** it calls `POST /v2/pods/$RUNPOD_POD_ID/action {"action":"terminate"}` with Runpod's pod-scoped `RUNPOD_API_KEY`, falling back to delete and then stop.
    - **Record:** the reason goes to `/workspace/qwenbench/shutdowns.jsonl` and the container log.
+   - **Key:** Runpod's pod-scoped key was **refused (HTTP 403)** on the first real pods. Create a separate, restricted Runpod API key and set `RUNPOD_SELF_STOP_API_KEY` in `.env`, or the supervisor cannot stop anything. `qwenbench up` warns when self-stop is unavailable.
 2. **Local guard (backstop).** Started by `qwenbench up`.
    - Uses your account key.
    - Terminates the pod if the supervisor declared a shutdown but the pod is still billing 5 minutes later. That would mean the pod-scoped key lacked permission, which Runpod does not document.
