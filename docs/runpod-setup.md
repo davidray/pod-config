@@ -17,7 +17,7 @@ when set, it is passed to the pod and nowhere else.
 
 1. **Guards.** Refuses if another qwenbench pod is live (unless `--allow-concurrent`), or if the GPU count would exceed `guards.max_gpu_count`.
 2. **Volume.** Finds the profile's network volume **by name** (`storage.volume_name`), or creates it in the profile's best-availability data center. No Runpod IDs live in this repo.
-3. **Pod.** Creates it via `POST /v2/pods` with the pinned image, the bootstrap env, `gpu.minCudaVersion: 12.9` and the volume mounted at `/workspace`. A per-session random bearer token protects vLLM and the supervisor. The session is saved locally before waiting, so `qwenbench down` works even if you Ctrl-C.
+3. **Pod.** Creates it via `POST /v2/pods` with the pinned image, the bootstrap env, `gpu.minCudaVersion: 13.0` and the volume mounted at `/workspace`. A per-session random bearer token protects vLLM and the supervisor. The session is saved locally before waiting, so `qwenbench down` works even if you Ctrl-C.
 4. **Readiness.** Polls pod status, the supervisor's `/status`, vLLM `/health` and `/v1/models`, then sends a real completion. It must come from the expected served model.
 5. **Guard.** Starts the local guard process.
 

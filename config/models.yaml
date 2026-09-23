@@ -10,11 +10,14 @@ models:
     quantization: fp8-block-128 (e4m3, dynamic activations)
     size_gb: 31.2
     gated: false                      # HF_TOKEN optional (only helps rate limits)
-    # CUDA 12.9 build rather than the CUDA 13 default: CUDA 13 needs host
-    # driver >= 580, which not every Runpod host has. Pinned by digest.
-    image: vllm/vllm-openai:v0.30.0-cu129@sha256:a67f8f186d4567612ac37a55bd82295006002b18858eb12a8af2f05f86c2ae3f
+    # Default CUDA 13 build, pinned by digest. The -cu129 variant is broken:
+    # it ships torch 2.14.0+cu130 with cu129 torchvision, and `vllm serve` dies
+    # with "operator torchvision::nms does not exist" (observed on a real A6000
+    # pod 2026-09-23; upstream vllm-project/vllm#56829). CUDA 13 needs host
+    # driver >= 580, enforced with gpu.minCudaVersion below.
+    image: vllm/vllm-openai:v0.30.0@sha256:8a69ffad015f138d7170c4ddc429e230a3bc1c1719f67e14324749df200a4b90
     vllm_version: 0.30.0
-    cuda_version: "12.9"
+    cuda_version: "13.0"
     runtime:
       max_model_len: 65536
       gpu_memory_utilization: 0.90
