@@ -244,8 +244,9 @@ class RunpodPodsProvider:
                     raise ProvisionError(f"Runpod refused: insufficient balance ({e.detail})") from e
                 if not e.is_capacity:
                     raise
-                errors.append(f"{dc}: {e.detail}")
-                progress(f"no capacity for {profile.gpu_type_id} in {dc}: {e.detail}")
+                where = dc or "any data center"
+                errors.append(f"{where}: {e.detail}")
+                progress(f"no capacity for {profile.gpu_type_id} in {where}: {e.detail}")
         hint = (" The network volume pins the data center; retry later or use --storage ephemeral."
                 if vol else "")
         raise ProvisionError(f"no capacity for {profile.gpu_type_id}: {'; '.join(errors)}.{hint}")
