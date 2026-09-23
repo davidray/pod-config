@@ -13,13 +13,14 @@ from typing import Any
 import httpx
 
 from qwenbench.config import Config, Profile, format_duration
+from qwenbench.paths import state_dir
 from qwenbench.providers.base import ComputeStatus, Endpoint
 from qwenbench.providers.openai_compat import OpenAICompatibleModel
 from qwenbench.readiness import LABELS, Observation, Phase, ReadinessMachine
 from qwenbench.runpod import podspec
 from qwenbench.runpod.client import RunpodClient, RunpodError
 from qwenbench.runpod.models import NetworkVolume, Pod
-from qwenbench.secrets import get_secret, require_secret
+from qwenbench.secrets import get_secret, redact, require_secret
 from qwenbench.state import Session, clear_session, load_session, log_event, save_session
 
 Progress = Callable[[str], None]
@@ -220,6 +221,8 @@ class RunpodPodsProvider:
             self._wait_ready(profile, session, machine, opts, progress)
         except BaseException as exc:  # includes KeyboardInterrupt
             reason = machine.failure or f"{type(exc).__name__}: {exc}"
+            if not isinstance(exc, KeyboardInterrupt):
+                self._capture_failure_logs(session, progress)
             if opts.keep_on_failure:
                 progress(f"startup failed ({reason}); --keep-on-failure set, pod {pod.id} left RUNNING (billing!)")
             else:
@@ -230,6 +233,34 @@ class RunpodPodsProvider:
                 raise
             raise ProvisionError(reason) from exc
         return self._endpoint_from_session(session)
+
+    def _capture_failure_logs(self, session: Session, progress: Progress, tail: int = 400) -> None:
+        """Save the pod's logs before it is terminated; afterwards they are gone."""
+        lines: list[str] = []
+        try:
+            with httpx.Client(timeout=15, transport=self._transport) as http:
+                r = http.get(f"{session.watchdog_url}/logs", params={"n": tail},
+                             headers={"Authorization": f"Bearer {session.api_key}"})
+                if r.status_code == 200:
+                    lines += ["# supervisor (vLLM output)", *r.json().get("lines", [])]
+        except (httpx.HTTPError, ValueError):
+            pass
+        try:
+            events = self.client.stream_logs(session.pod_id, tail=tail)
+            lines += ["# runpod container/system logs",
+                      *(f"[{e.get('source', '?')}] {e.get('line', '')}" for e in events)]
+        except (RunpodError, httpx.HTTPError):
+            pass
+        if not lines:
+            progress("could not retrieve pod logs before termination")
+            return
+        out = state_dir() / "failures" / f"{session.profile}-{session.pod_id}.log"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(redact("\n".join(lines), extra_secrets=[session.api_key]) + "\n")
+        log_event("startup-logs-captured", profile=session.profile, pod_id=session.pod_id, path=str(out))
+        progress(f"pod logs saved to {out}; last lines:")
+        for line in [x for x in lines if not x.startswith("# ")][-25:]:
+            progress(f"    {line}")
 
     def _create(self, profile: Profile, env: dict[str, str], dcs: list[str],
                 vol: NetworkVolume | None, progress: Progress) -> Pod:

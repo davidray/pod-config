@@ -317,3 +317,24 @@ def test_ephemeral_falls_back_to_any_data_center(cfg, patch_model_transport):
     p = p.model_copy(update={"storage": p.storage.model_copy(update={"mode": "ephemeral"})})
     prov.up(p)
     assert fake.created[0]["dataCenterIds"] == []  # scheduler's choice
+
+
+def test_startup_failure_saves_logs_before_terminating(cfg, patch_model_transport, tmp_path):
+    fake = FakeRunpod()
+    base = ready_transport(phase="vllm_exited")
+
+    def handler(req):
+        if req.url.path == "/logs":
+            return httpx.Response(200, json={"lines": ["ValueError: boom in engine core"]})
+        return base.handle_request(req)
+    t = httpx.MockTransport(handler)
+    patch_model_transport(t)
+    prov, _ = provider(cfg, fake, t)
+    msgs = []
+    with pytest.raises(ProvisionError, match="vLLM process exited"):
+        prov.up(cfg.profile("a6000"), progress=msgs.append)
+    saved = list((tmp_path / "state" / "failures").glob("a6000-*.log"))
+    assert saved and "boom in engine core" in saved[0].read_text()
+    assert "line 2" in saved[0].read_text()  # runpod logs API too
+    assert fake.terminated == ["pod_1"]
+    assert any("boom in engine core" in m for m in msgs)
