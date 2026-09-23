@@ -188,6 +188,11 @@ class RunpodPodsProvider:
             raise GuardViolation(f"pod {pod.id} named {pod.name} is live but has no ready local session; "
                                  f"run `qwenbench down {profile.name}` first")
 
+        # Self-stop leaves the pod EXITED (the watchdog's key may stop but not
+        # delete). Stopped pods bill nothing here, but clear them so they don't pile up.
+        for stale in [p for p in self.pods_for(profile) if p.status == "EXITED"]:
+            progress(f"removing stopped pod {stale.id} left by a previous session")
+            self._terminate(stale.id, profile.name, reason="cleanup: stopped pod from a previous session")
         vol = self.ensure_volume(profile, progress)
         list_rate = self.cfg.pricing.gpu_rate(profile.gpu_type_id, profile.cloud) * profile.gpu_count
         api_key = pysecrets.token_urlsafe(32)
@@ -331,12 +336,16 @@ class RunpodPodsProvider:
         sup = self.supervisor_status(session.watchdog_url, session.api_key) or {}
         if sup.get("runpod_api_auth_ok") is not False:
             return
-        log_event("self-stop-unavailable", profile=session.profile, pod_id=session.pod_id,
-                  key_source=sup.get("runpod_api_key_source"))
-        progress("WARNING: the pod cannot call the Runpod API (key source: "
-                 f"{sup.get('runpod_api_key_source')}), so in-pod idle/spend shutdown cannot stop it. "
-                 "Only the local guard can, and only while this machine is awake. "
-                 "Set RUNPOD_SELF_STOP_API_KEY (see docs/runpod-setup.md) to fix.")
+        source, code = sup.get("runpod_api_key_source"), sup.get("runpod_api_probe_status")
+        log_event("self-stop-unverified", profile=session.profile, pod_id=session.pod_id, key_source=source,
+                  probe_status=code)
+        if source == "self-stop-key":
+            progress(f"note: the pod could not read its own record (HTTP {code}); in-pod self-stop is unverified "
+                     "but has worked with a self-stop key before. The local guard remains the backstop.")
+        else:
+            progress(f"WARNING: no RUNPOD_SELF_STOP_API_KEY and Runpod's pod key was refused (HTTP {code}); the pod "
+                     "cannot stop itself. Only the local guard can, and only while this machine is awake. "
+                     "See docs/runpod-setup.md.")
 
     def _terminate(self, pod_id: str, profile: str, reason: str) -> bool:
         gone = not self.client.terminate_pod(pod_id)

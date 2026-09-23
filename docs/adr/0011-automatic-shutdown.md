@@ -32,6 +32,17 @@ Response:
   supervisor reports it cannot reach the API. `qwenbench doctor` warns when the
   key is not set.
 
-Still to validate: which Runpod key permission level is the minimum that allows
-stop/terminate. The first launch with a self-stop key should confirm
-`runpod_api_auth_ok: true` in `qwenbench status`.
+Validated on two real A6000 pods with a self-stop key and the local guard
+disabled (`--idle-timeout 3m --no-guard`): both **stopped themselves** with no
+workstation involvement. Observations:
+
+- They ended EXITED, not deleted. The watchdog tries terminate/delete first,
+  so the key apparently allows stop but not delete. Billing confirmed a
+  stopped pod costs nothing here (ephemeral storage). `qwenbench up` now removes
+  the profile's leftover stopped pods before creating a new one.
+- The boot-time read of the pod's own record failed even though stopping
+  worked, so a failed read no longer claims self-stop is impossible. The
+  warning says "unverified" and reports the HTTP status.
+- Container stdout is not retained by Runpod after a stop, so the shutdown
+  reason logged inside the pod is lost. The local event log and billing
+  records are the evidence of record.

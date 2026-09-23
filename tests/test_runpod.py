@@ -355,15 +355,16 @@ def test_up_warns_when_pod_cannot_stop_itself(cfg, patch_model_transport):
     def handler(req):
         if req.url.path == "/status":
             return httpx.Response(200, json={"phase": "server_up", "runpod_api_auth_ok": False,
-                                             "runpod_api_key_source": "pod-scoped-key"})
+                                             "runpod_api_key_source": "pod-scoped-key",
+                                             "runpod_api_probe_status": 403})
         return base.handle_request(req)
     t = httpx.MockTransport(handler)
     patch_model_transport(t)
     prov, _ = provider(cfg, fake, t)
     msgs = []
     prov.up(cfg.profile("a6000"), progress=msgs.append)
-    assert any("cannot stop it" in m for m in msgs)
-    assert any(e["event"] == "self-stop-unavailable" for e in read_events())
+    assert any("cannot stop itself" in m and "HTTP 403" in m for m in msgs)
+    assert any(e["event"] == "self-stop-unverified" for e in read_events())
 
 
 def test_billing_always_sends_start_and_end():
@@ -374,3 +375,13 @@ def test_billing_always_sends_start_and_end():
         return httpx.Response(200, json={"records": [], "metadata": {"totals": {}}})
     RunpodClient("k" * 20, transport=httpx.MockTransport(handler)).pod_billing("p", "2026-09-23T17:00:00Z")
     assert seen["startTime"] == "2026-09-23T17:00:00Z" and seen["endTime"]
+
+
+def test_up_removes_stopped_pods_left_by_self_stop(cfg, patch_model_transport):
+    fake = FakeRunpod()
+    fake.pods["old"] = {**pod_json("old", name="qwenbench-a6000", status="EXITED"), "_status_iter": ["EXITED"]}
+    t = ready_transport()
+    patch_model_transport(t)
+    prov, _ = provider(cfg, fake, t)
+    prov.up(cfg.profile("a6000"))
+    assert "old" in fake.terminated and len(fake.created) == 1
