@@ -118,7 +118,7 @@ def test_ephemeral_storage_sizes_disk(cfg):
     p = cfg.profile("l40s")
     p = p.model_copy(update={"storage": p.storage.model_copy(update={"mode": "ephemeral"})})
     body = podspec.create_body(p, env={}, data_center_ids=[], network_volume_id=None)
-    assert "mounts" not in body and body["disk"] == p.container_disk_gb + p.storage.size_gb
+    assert "mounts" not in body and body["disk"] == p.container_disk_gb + 38  # 31.2 GB weights x 1.2
 
 
 # ------------------------------------------------------------------ provider lifecycle
