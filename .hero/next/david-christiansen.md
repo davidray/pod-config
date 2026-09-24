@@ -1,10 +1,22 @@
 ---
 user: david-christiansen
-updated: 2026-09-24T12:26:26Z
+updated: 2026-09-24T12:42:00Z
 repo: davidray/pod-config
 ---
 
 # david-christiansen's handoff
+
+## Session goal
+
+> Session opened with — <pasted_content id="86c9">
+> I want you to build a reproducible repository for testing whether Runpod-hosted Qwen can replace frontier models for routine software implementation work while keeping Claude for higher-level engineering tasks.
+> This should be a real, usable repository, not a proof-of-concept script.
+> Goal
+> Create a repository that lets me reproducibly:
+> 
+> 1. Provision a Runpod A6000 environm…
+
+_possibly stale — 14 commit(s) since, last set 22h 8m ago_
 
 ## Last user ask
 
@@ -15,8 +27,7 @@ repo: davidray/pod-config
 > Create a repository that lets me reproducibly:
 > 
 > 1. Provision a Runpod A6000 environm…
-
-_possibly stale — 1 commit(s) since, last set 19m ago_
+> _possibly stale — 2 commit(s) since, last set 19m ago_
 
 ## Suggested next prompt
 

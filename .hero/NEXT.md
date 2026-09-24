@@ -5,7 +5,7 @@ Project shape: see [SNAPSHOT.md](.hero/SNAPSHOT.md).
 <!-- hero:managed-end -->
 
 ---
-updated: 2026-09-24T12:26:26Z
+updated: 2026-09-24T12:42:00Z
 repo: davidray/pod-config
 ---
 

@@ -16,8 +16,8 @@ when set, it is passed to the pod and nowhere else.
 ## What `qwenbench up` does
 
 1. **Guards.** Refuses if another qwenbench pod is live (unless `--allow-concurrent`), or if the GPU count would exceed `guards.max_gpu_count`.
-2. **Volume.** Finds the profile's network volume **by name** (`storage.volume_name`), or creates it in the profile's best-availability data center. No Runpod IDs live in this repo.
-3. **Pod.** Creates it via `POST /v2/pods` with the pinned image, the bootstrap env, `gpu.minCudaVersion: 13.0` and the volume mounted at `/workspace`. A per-session random bearer token protects vLLM and the supervisor. The session is saved locally before waiting, so `qwenbench down` works even if you Ctrl-C.
+2. **Storage.** The default is ephemeral: the pod gets a container disk sized for the weights and may start in any data center with stock. With `--storage network-volume`, it finds the profile's network volume **by name** (`storage.volume_name`), or creates it in the profile's best-availability data center. No Runpod IDs live in this repo.
+3. **Pod.** Creates it via `POST /v2/pods` with the pinned image, the bootstrap env, `gpu.minCudaVersion: 13.0` and any volume mounted at `/workspace`. It tries the profile's data centers first, then any data center when there is no volume. With no profile named, it goes through `profile_preference` (a6000, a40, l40s) and moves on to the next profile when one has no capacity. A per-session random bearer token protects vLLM and the supervisor. The session is saved locally before waiting, so `qwenbench down` works even if you Ctrl-C.
 4. **Readiness.** Polls pod status, the supervisor's `/status`, vLLM `/health` and `/v1/models`, then sends a real completion. It must come from the expected served model.
 5. **Guard.** Starts the local guard process.
 
@@ -26,21 +26,23 @@ On any failure or Ctrl-C during startup the pod is terminated unless you pass
 
 ### Startup timing
 
-- **First boot:** downloads about 31 GB. Expect 10-20 minutes depending on the data center, plus vLLM's torch.compile and CUDA-graph capture.
-- **Later boots:** the entrypoint finds the pinned revision on the volume and sets `HF_HUB_OFFLINE=1`. The compile cache is persisted as well, so startup is dominated by loading weights from the network volume.
+- **Ephemeral (default):** downloads about 31 GB on every start. Measured 2m36s (L40S) and 7m25s (A6000) to verified inference on 2026-09-24, depending on the host's network.
+- **Network volume, later boots:** the entrypoint finds the pinned revision on the volume and sets `HF_HUB_OFFLINE=1`. The compile cache is persisted as well, so startup is dominated by loading weights from the network volume.
 
 `qwenbench up` prints each phase and records the timings in the session and in
 benchmark `run.json` (`session.startup`).
 
 ## Profiles
 
-`config/runpod.yaml` defines `a6000` and `l40s`:
+`config/runpod.yaml` defines `a6000`, `a40` and `l40s`, all 48 GB:
 
-| | a6000 | l40s |
-|---|---|---|
-| GPU type id (verified in v2 catalog) | `NVIDIA RTX A6000` | `NVIDIA L40S` |
-| Data centers with the GPU and network volumes (2026-09-23) | CA-MTL-3, EU-RO-1 | US-IL-1, EU-NL-1, US-TX-3 |
-| Cache volume | `qwenbench-hf-cache-a6000` | `qwenbench-hf-cache-l40s` |
+| | a6000 | a40 | l40s |
+|---|---|---|---|
+| GPU type id (verified in v2 catalog) | `NVIDIA RTX A6000` | `NVIDIA A40` | `NVIDIA L40S` |
+| FP8 path | Marlin W8A16 (Ampere) | Marlin W8A16 (Ampere) | native FP8 (Ada) |
+| Secure list price | $0.53/hr | $0.49/hr | $1.09/hr |
+| Preferred data centers | CA-MTL-3, EU-RO-1 | EU-SE-1, CA-MTL-1 (no network volumes) | US-IL-1, EU-NL-1, US-TX-3 |
+| Benchmarked | daveeval x3, 17/18 | not yet | daveeval x3, 16/18 |
 
 No data center offered network volumes for **both** GPUs at the time of
 writing, so each profile has its own cache volume holding the same pinned
@@ -49,7 +51,9 @@ revision. `qwenbench doctor` re-checks availability live. Edit
 
 ## Persistent storage
 
-- Network volume: 60 GB by default, about $4.20/month each. See [COSTS.md](COSTS.md).
+Ephemeral is the default (ADR 0012), because a network volume pins every start to one data center.
+
+- Network volume (`--storage network-volume`): 60 GB, about $4.20/month each. See [COSTS.md](COSTS.md).
 - A volume is bound to one data center, so a pod using it can only start there. If that data center is out of stock, `qwenbench up` says so. Options:
   - wait
   - `qwenbench up P --storage ephemeral`: any data center, re-downloads weights, no standing cost

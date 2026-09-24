@@ -26,7 +26,12 @@ defaults:
   max_session: 8h                   # hard cap regardless of activity; "off" disables
   max_spend_usd: 10.00              # per session; watchdog terminates when exceeded
   storage:
-    mode: network-volume            # network-volume | ephemeral
+    # ephemeral: the pod may start in any data center with stock, and downloads
+    # the ~31 GB weights on each start (2.5-7.5 min to ready on 2026-09-24).
+    # network-volume caches them but pins every start to the volume's data
+    # center, which is what made `up` fail when that data center ran out.
+    # See docs/adr/0012.
+    mode: ephemeral                 # network-volume | ephemeral
     size_gb: 60                     # weights ~31 GB + vLLM compile cache + headroom
     mount_path: /workspace
 
@@ -37,8 +42,9 @@ guards:
 # `qwenbench up` with no profile tries these in order and uses the first with
 # capacity; a Hero role mapped to plain "qwen" uses whichever is ready, in this
 # order. A6000 first: ~40% cheaper per passed task in the 2026-09-24 daveeval
-# run. A no-capacity attempt fails in seconds, so falling through costs little.
-profile_preference: [a6000, l40s]
+# run. A40 next: same Ampere FP8 path as the A6000 and cheaper, but not yet
+# benchmarked. A no-capacity attempt fails in seconds, so falling through costs little.
+profile_preference: [a6000, a40, l40s]
 
 profiles:
   a6000:
@@ -49,6 +55,15 @@ profiles:
     data_center_ids: [CA-MTL-3, EU-RO-1]
     storage:
       volume_name: qwenbench-hf-cache-a6000
+    runtime_overrides: {}
+
+  a40:
+    description: NVIDIA A40 48GB (Ampere sm_86) - FP8 weights via Marlin W8A16 kernels, like the A6000
+    gpu_type_id: "NVIDIA A40"
+    # Data centers listing A40 stock on 2026-09-24; neither offers network volumes.
+    data_center_ids: [EU-SE-1, CA-MTL-1]
+    storage:
+      volume_name: qwenbench-hf-cache-a40
     runtime_overrides: {}
 
   l40s:
