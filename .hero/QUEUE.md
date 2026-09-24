@@ -6,7 +6,7 @@
 
 # Hero Ready Queue
 
-_Generated: 2026-09-24T03:53:53Z · 1 ready spec_
+_Generated: 2026-09-24T03:54:00Z · 1 ready spec_
 
 ## qwen-runpod-bench — Qwen Runpod Bench
 _feature · planning · horizon: now_
