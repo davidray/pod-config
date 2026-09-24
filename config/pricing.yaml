@@ -14,6 +14,9 @@ gpu_hourly:
   "NVIDIA RTX A6000":
     SECURE: 0.53
     COMMUNITY: 0.33
+  "NVIDIA A40":
+    SECURE: 0.49              # catalog price 2026-09-24
+    COMMUNITY: 0.35
   "NVIDIA L40S":
     SECURE: 1.09
     COMMUNITY: 0.79

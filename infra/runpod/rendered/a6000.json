@@ -42,14 +42,6 @@
     "cmd": [
       "set -e; mkdir -p /opt/qwenbench; echo \"$QWENBENCH_BOOTSTRAP\" | base64 -d | tar -xz -C /opt/qwenbench; exec bash /opt/qwenbench/entrypoint.sh"
     ],
-    "disk": 30,
-    "mounts": {
-      "network": [
-        {
-          "volumeId": "<discovered by name at `qwenbench up`>",
-          "path": "/workspace"
-        }
-      ]
-    }
+    "disk": 68
   }
 }

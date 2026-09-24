@@ -161,6 +161,7 @@ class FakeRunpod:
         self.capacity_errors = capacity_errors or set()
         self.statuses = statuses or ["PROVISIONING", "STARTING", "RUNNING"]
         self.gpu_availability: dict[str, str] = {}
+        self.no_stock_gpus: set[str] = set()  # refused in every data center
         self._n = 0
 
     def handler(self, request: httpx.Request) -> httpx.Response:
@@ -171,7 +172,7 @@ class FakeRunpod:
         if path == "/v2/pods" and method == "POST":
             body = json.loads(request.content)
             dc = (body.get("dataCenterIds") or ["ANY"])[0]
-            if dc in self.capacity_errors:
+            if dc in self.capacity_errors or body["gpu"]["id"] in self.no_stock_gpus:
                 return httpx.Response(400, json={"title": "Bad Request", "status": 400,
                                                  "detail": f"no {body['gpu']['id']} available in {dc}"})
             self._n += 1

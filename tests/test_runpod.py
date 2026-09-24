@@ -100,7 +100,7 @@ def test_billing_and_volumes():
 
 
 def test_create_body_shape(cfg):
-    p = cfg.profile("a6000")
+    p = with_volume(cfg.profile("a6000"))
     env = podspec.pod_env(p, endpoint_api_key="k" * 30, list_cost_per_hr=0.53, hf_token=FAKE_HF_TOKEN)
     body = podspec.create_body(p, env=env, data_center_ids=["EU-RO-1"], network_volume_id="vol_1")
     assert body["gpu"] == {"id": "NVIDIA RTX A6000", "count": 1, "minCudaVersion": "13.0"}
@@ -128,6 +128,10 @@ def test_ephemeral_storage_sizes_disk(cfg):
 
 
 # ------------------------------------------------------------------ provider lifecycle
+
+
+def with_volume(p):
+    return p.model_copy(update={"storage": p.storage.model_copy(update={"mode": "network-volume"})})
 
 
 def ready_transport(model="qwen3-coder-30b-a3b-fp8", phase="server_up"):
@@ -188,7 +192,7 @@ def test_up_creates_volume_pod_and_waits_for_real_inference(cfg, patch_model_tra
     patch_model_transport(t)
     prov, clock = provider(cfg, fake, t)
     msgs = []
-    ep = prov.up(cfg.profile("a6000"), UpOptions(idle_timeout_s=3600.0), progress=msgs.append)
+    ep = prov.up(with_volume(cfg.profile("a6000")), UpOptions(idle_timeout_s=3600.0), progress=msgs.append)
     assert ep.base_url == "https://pod_1-8000.proxy.runpod.net/v1" and ep.model == "qwen3-coder-30b-a3b-fp8"
     # volume discovered/created by name, in the best-availability data center
     vol = next(iter(fake.volumes.values()))
@@ -262,25 +266,35 @@ def test_capacity_error_with_volume_explains(cfg, patch_model_transport):
     patch_model_transport(t)
     prov, _ = provider(cfg, fake, t)
     with pytest.raises(ProvisionError, match="ephemeral"):
-        prov.up(cfg.profile("a6000"))
+        prov.up(with_volume(cfg.profile("a6000")))
     assert not fake.pods
 
 
 def test_up_first_available_falls_through_to_next_profile(cfg, patch_model_transport):
     fake = FakeRunpod()
+    fake.no_stock_gpus = {"NVIDIA RTX A6000", "NVIDIA A40"}
+    t = ready_transport()
+    patch_model_transport(t)
+    prov, _ = provider(cfg, fake, t)
+    ep = prov.up_first_available([cfg.profile(n) for n in cfg.preferred_profiles()])
+    assert ep.profile == "l40s"
+    assert [b["gpu"]["id"] for b in fake.created] == ["NVIDIA L40S"] and not fake.volumes
+
+
+def test_up_first_available_falls_through_before_creating_a_volume(cfg, patch_model_transport):
+    fake = FakeRunpod()
     fake.gpu_availability["NVIDIA RTX A6000"] = "NONE"
     t = ready_transport()
     patch_model_transport(t)
     prov, _ = provider(cfg, fake, t)
-    ep = prov.up_first_available([cfg.profile("a6000"), cfg.profile("l40s")])
+    ep = prov.up_first_available([with_volume(cfg.profile("a6000")), with_volume(cfg.profile("l40s"))])
     assert ep.profile == "l40s"
-    assert [b["gpu"]["id"] for b in fake.created] == ["NVIDIA L40S"]
     assert [v["name"] for v in fake.volumes.values()] == ["qwenbench-hf-cache-l40s"]
 
 
 def test_up_first_available_single_profile_keeps_capacity_error(cfg, patch_model_transport):
     fake = FakeRunpod()
-    fake.gpu_availability["NVIDIA RTX A6000"] = "NONE"
+    fake.no_stock_gpus = {"NVIDIA RTX A6000"}
     t = ready_transport()
     patch_model_transport(t)
     prov, _ = provider(cfg, fake, t)
@@ -343,7 +357,7 @@ def test_no_stock_does_not_create_a_billed_volume(cfg, patch_model_transport):
     patch_model_transport(t)
     prov, _ = provider(cfg, fake, t)
     with pytest.raises(ProvisionError, match="no availability"):
-        prov.up(cfg.profile("a6000"))
+        prov.up(with_volume(cfg.profile("a6000")))
     assert not fake.volumes and not fake.created
 
 

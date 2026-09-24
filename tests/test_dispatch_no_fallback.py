@@ -181,5 +181,5 @@ def test_any_profile_route_with_nothing_up_fails_fast(cfg, hero_project):
 
     conf.apply(conf.plan_configure(cfg, hero_project, "any", "claude-opus-5-5"))
     result, code = run_dispatch(cfg, req(hero_project), hero_project, provider_factory=lambda c: ReadyProfiles({}))
-    assert code == 4 and "any of a6000, l40s" in result.failure.message
+    assert code == 4 and "any of a6000, a40, l40s" in result.failure.message
     assert "`qwenbench up`" in result.failure.message
