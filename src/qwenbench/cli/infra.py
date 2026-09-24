@@ -33,7 +33,8 @@ def _opt_spend(value: str | None) -> float | None | str:
 
 @handle_errors
 def up(
-    profile: str = typer.Argument(..., help="Profile from config/runpod.yaml, e.g. a6000 or l40s"),
+    profile: str = typer.Argument(None, help="Profile from config/runpod.yaml, e.g. a6000 or l40s. "
+                                            "Omit to use the first of profile_preference with capacity."),
     idle_timeout: str = typer.Option(None, help="e.g. 60m; 'off' disables (explicit, and warned about)"),
     max_session: str = typer.Option(None, help="Hard lifetime cap, e.g. 4h; 'off' disables"),
     max_spend: str = typer.Option(None, help="USD cap for this session; 'off' disables"),
@@ -45,9 +46,10 @@ def up(
 ) -> None:
     """Provision a pod, wait until the model actually serves, and print the endpoint."""
     c = cfg()
-    p = c.profile(profile)
+    candidates = [c.profile(n) for n in ([profile] if profile else c.preferred_profiles())]
     if storage:
-        p = p.model_copy(update={"storage": p.storage.model_copy(update={"mode": storage})})
+        candidates = [p.model_copy(update={"storage": p.storage.model_copy(update={"mode": storage})})
+                      for p in candidates]
     opts = UpOptions(idle_timeout_s=_opt_duration(idle_timeout), max_session_s=_opt_duration(max_session),
                      max_spend_usd=_opt_spend(max_spend),
                      startup_timeout_s=parse_duration(startup_timeout) if startup_timeout else None,
@@ -55,12 +57,14 @@ def up(
     if opts.idle_timeout_s is None:
         err.print("[yellow]WARNING: idle shutdown DISABLED for this session. The pod bills until `qwenbench down` "
                   "or max-session/max-spend trips.[/]")
-    rate = c.pricing.gpu_rate(p.gpu_type_id, p.cloud) * p.gpu_count
-    console.print(f"[bold]{profile}[/]: {p.gpu_type_id} ({p.cloud}) list price ~${rate:.2f}/hr; "
-                  f"model {p.model.hf_repo}@{p.model.revision[:10]}")
+    for p in candidates:
+        rate = c.pricing.gpu_rate(p.gpu_type_id, p.cloud) * p.gpu_count
+        console.print(f"[bold]{p.name}[/]: {p.gpu_type_id} ({p.cloud}) list price ~${rate:.2f}/hr; "
+                      f"model {p.model.hf_repo}@{p.model.revision[:10]}")
     prov = provider(c)
     t0 = time.time()
-    ep = prov.up(p, opts, progress=lambda m: console.print(m))
+    ep = prov.up_first_available(candidates, opts, progress=lambda m: console.print(m))
+    profile = ep.profile
     session = load_session(profile)
     console.print(f"[green]ready[/] in {format_duration(time.time() - t0)}: {ep.base_url}  model={ep.model}")
     if session:

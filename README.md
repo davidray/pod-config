@@ -96,9 +96,9 @@ See [docs/benchmarking.md](docs/benchmarking.md).
 ## Hero integration
 
 ```bash
-qwenbench up a6000
+qwenbench up                                                          # first of a6000, l40s with capacity
 qwenbench hero inspect ~/code/myproject                               # roles, agents, routes (read-only)
-qwenbench hero configure ~/code/myproject --execution-profile a6000   # shows the diff, asks, applies
+qwenbench hero configure ~/code/myproject                             # shows the diff, asks, applies
 qwenbench hero verify ~/code/myproject                                # proves the wiring, incl. a real hook call
 # work in Claude Code as usual; afterwards:
 qwenbench hero audit ~/code/myproject                                 # which model did what

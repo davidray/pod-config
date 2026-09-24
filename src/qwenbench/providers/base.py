@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from qwenbench.config import Profile
+from qwenbench.config import Config, Profile
 
 
 @dataclass
@@ -44,6 +44,15 @@ class ComputeProvider(Protocol):
     def status(self, profile: Profile) -> ComputeStatus: ...
     def logs(self, profile: Profile, tail: int = 200, follow: bool = False) -> Any: ...
     def endpoint(self, profile: Profile) -> Endpoint | None: ...
+
+
+def first_ready(provider: ComputeProvider, cfg: Config, names: list[str]) -> Endpoint | None:
+    """The endpoint of the first profile in `names` (in order) that is ready."""
+    for name in names:
+        ep = provider.endpoint(cfg.profile(name))
+        if ep:
+            return ep
+    return None
 
 
 class ModelProvider(Protocol):

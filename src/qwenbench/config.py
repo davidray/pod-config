@@ -168,6 +168,15 @@ class RunpodFile(Strict):
     defaults: ProfileDefaults
     guards: Guards = Field(default_factory=Guards)
     profiles: dict[str, ProfileSpec]
+    # Order `qwenbench up` (no profile) tries, and the order a "qwen" route picks a ready endpoint.
+    profile_preference: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _preference_known(self) -> RunpodFile:
+        unknown = [n for n in self.profile_preference if n not in self.profiles]
+        if unknown:
+            raise ValueError(f"profile_preference names unknown profiles: {unknown}")
+        return self
 
 
 class Profile(Strict):
@@ -285,6 +294,9 @@ class Config(BaseModel):
 
     def profile_names(self) -> list[str]:
         return sorted(self.runpod.profiles)
+
+    def preferred_profiles(self) -> list[str]:
+        return self.runpod.profile_preference or self.profile_names()
 
 
 def resolve_profile(cfg: Config, name: str, **overrides: Any) -> Profile:
