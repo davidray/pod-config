@@ -56,7 +56,7 @@ Phases, each runnable and tested:
 
 ## Acceptance Criteria
 
-- [ ] `qwenbench up a6000` / `qwenbench up l40s` reach verified READY on real Runpod and print phase timings (needs credentials; not yet run)
+- [x] `qwenbench up a6000` / `qwenbench up l40s` reach verified READY on real Runpod and print phase timings (A6000 445 s, L40S 156 s; full daveeval run on both, see docs/benchmarking.md)
 - [x] `qwenbench down --all` is idempotent and touches only `qwenbench-*` pods (tested against a fake v2 API)
 - [x] Idle, startup, session and spend shutdowns terminate the pod and record the reason (supervisor tested as a real process; guard decisions unit-tested)
 - [x] Same model revision, runtime, generation, agent, prompts, starting commits and validation on both GPUs; `compare` flags any difference
