@@ -72,7 +72,9 @@ def test_git_exclude_keeps_local_files_out_of_git(cfg, configured_project):
 def test_git_exclude_works_in_a_linked_worktree(cfg, hero_project, tmp_path):
     wt = tmp_path / "wt"
     subprocess.run(["git", "worktree", "add", "-q", "-b", "trial", str(wt)], cwd=hero_project, check=True)
-    conf.apply(conf.plan_configure(cfg, wt, "any", "claude-opus-5-5"))
+    plan = conf.plan_configure(cfg, wt, "any", "claude-opus-5-5")
+    assert "info/exclude" in plan.diff()
+    conf.apply(plan)
     status = subprocess.run(["git", "status", "--porcelain"], cwd=wt, capture_output=True, text=True).stdout
     assert ".qwen-routing" not in status and "CLAUDE.local.md" not in status, status
 

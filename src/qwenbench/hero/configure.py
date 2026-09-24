@@ -129,7 +129,8 @@ class FileChange:
     new: str
 
     def diff(self, project: Path) -> str:
-        rel = self.path.relative_to(project)
+        # A linked worktree's info/exclude lives in the main repo, outside the project.
+        rel = self.path.relative_to(project) if self.path.is_relative_to(project) else self.path
         return "".join(difflib.unified_diff(self.old.splitlines(keepends=True), self.new.splitlines(keepends=True),
                                             fromfile=f"a/{rel}", tofile=f"b/{rel}"))
 
