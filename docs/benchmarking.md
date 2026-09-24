@@ -134,3 +134,52 @@ One trial, not a benchmark result, but it shows the system working end to end:
 | GPU lifetime / cost | 8m41s / $0.077 (observed $0.53/hr) |
 
 Qwen's fix used `(n + per_page - 1) // per_page`, equivalent to the reference solution.
+
+## Full daveeval, both GPUs (2026-09-24, repeat 3, max 2 attempts, Secure Cloud, ephemeral storage)
+
+Runs `20260924T020758Z-l40s-daveeval` and `20260924T030625Z-a6000-daveeval`.
+`bench compare` found no comparability differences: same model revision,
+runtime, generation settings, agent, prompts, starting commits and validation.
+
+| metric | L40S | RTX A6000 |
+|---|---|---|
+| tasks passed (of 18) | 16 | 17 |
+| first-attempt passes | 13 | 15 |
+| startup to verified inference | 156 s | 445 s |
+| benchmark wall time | 38m51s | 47m03s |
+| median TTFT / p90 | 0.71 s / 1.43 s | 0.46 s / 0.80 s |
+| median decode speed | 125 tok/s | 106 tok/s |
+| requests (failed / retried) | 706 (0 / 0) | 691 (0 / 0) |
+| GPU lifetime | 41m30s | 54m30s |
+| GPU cost (observed rate) | $0.75 | $0.48 |
+| cost per passed task | $0.047 | $0.028 |
+
+Per case (passes of 3):
+
+| case | L40S | A6000 |
+|---|---|---|
+| fix-pagination-regression | 3 | 3 |
+| refactor-discount-strategies | 3 | 3 |
+| tax-rounding-multifile-bug | 3 | 3 |
+| csv-export-feature | 3 | 3 |
+| cli-customer-filter | 3 (2 needed a second attempt) | 3 |
+| aging-report-tests | 1 | 2 (both on the second attempt) |
+
+Findings:
+
+- Bug fixes, refactors and small features pass reliably on either GPU. The
+  difference in pass counts is within noise at n=3; the model is the same.
+- `aging-report-tests` is the weak spot, and it is a real model limitation, not a
+  harness artifact. Every failure is the same surviving mutant (`result = result
+  + amount` → `result = amount` in `total_outstanding()`): Qwen's tests never
+  total two or more invoices. The second attempt was shown that exact surviving
+  mutant and still did not add such a test. Treat Qwen-written tests (the
+  `test-architect` role) as needing review, or keep that role on Claude.
+- The L40S decodes about 18% faster, and it started faster in this run, though
+  startup mostly depends on the host's image and model download speed. The A6000
+  had lower TTFT. The A6000 is about 40% cheaper per passed task and was harder
+  to get: it had no capacity for about 50 minutes, while an L40S was available
+  immediately.
+- Prefix caching covered about 98% of input tokens on both GPUs.
+- Costs are observed-rate estimates. Runpod billing had not yet posted when the
+  runs ended.
