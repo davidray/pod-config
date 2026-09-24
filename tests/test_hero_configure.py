@@ -69,6 +69,14 @@ def test_git_exclude_keeps_local_files_out_of_git(cfg, configured_project):
     assert ".qwen-routing" not in status and "CLAUDE.local.md" not in status and "settings.local.json" not in status
 
 
+def test_git_exclude_works_in_a_linked_worktree(cfg, hero_project, tmp_path):
+    wt = tmp_path / "wt"
+    subprocess.run(["git", "worktree", "add", "-q", "-b", "trial", str(wt)], cwd=hero_project, check=True)
+    conf.apply(conf.plan_configure(cfg, wt, "any", "claude-opus-5-5"))
+    status = subprocess.run(["git", "status", "--porcelain"], cwd=wt, capture_output=True, text=True).stdout
+    assert ".qwen-routing" not in status and "CLAUDE.local.md" not in status, status
+
+
 def test_inspect_reports_inventory_and_unclassified(cfg, configured_project):
     (configured_project / ".claude" / "agents" / "my-custom-agent.md").write_text("---\nname: x\n---\n")
     info = conf.inspect(cfg, configured_project)
