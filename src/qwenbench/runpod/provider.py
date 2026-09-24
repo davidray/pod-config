@@ -14,7 +14,7 @@ import httpx
 
 from qwenbench.config import Config, Profile, format_duration
 from qwenbench.paths import state_dir
-from qwenbench.providers.base import ComputeStatus, Endpoint
+from qwenbench.providers.base import ComputeStatus, Endpoint, first_ready
 from qwenbench.providers.openai_compat import OpenAICompatibleModel
 from qwenbench.readiness import LABELS, Observation, Phase, ReadinessMachine
 from qwenbench.runpod import podspec
@@ -32,6 +32,10 @@ class GuardViolation(RuntimeError):
 
 class ProvisionError(RuntimeError):
     pass
+
+
+class NoCapacity(ProvisionError):
+    """The GPU has no stock right now; nothing was created."""
 
 
 @dataclass
@@ -127,8 +131,8 @@ class RunpodPodsProvider:
         # Creating a volume starts a monthly charge; don't do it for a GPU with no stock.
         catalog = self.client.gpu_catalog(profile.gpu_type_id, cloud=profile.cloud)
         if catalog and catalog[0].get("availability") == "NONE":
-            raise ProvisionError(f"{profile.gpu_type_id} ({profile.cloud}) has no availability right now; "
-                                 "not creating its cache volume. Retry later (`qwenbench doctor` shows stock).")
+            raise NoCapacity(f"{profile.gpu_type_id} ({profile.cloud}) has no availability right now; "
+                             "not creating its cache volume. Retry later (`qwenbench doctor` shows stock).")
         dcs = self.available_data_centers(profile)
         if not dcs:
             raise ProvisionError(f"profile {profile.name} has no data_center_ids to place its network volume")
@@ -240,6 +244,22 @@ class RunpodPodsProvider:
             raise ProvisionError(reason) from exc
         return self._endpoint_from_session(session)
 
+    def up_first_available(self, profiles: list[Profile], opts: UpOptions | None = None,
+                           progress: Progress = print) -> Endpoint:
+        """Bring up the first profile with capacity, in order; reuse one that is already ready."""
+        ready = first_ready(self, self.cfg, [p.name for p in profiles])
+        if ready:
+            progress(f"{ready.profile} already up")
+            return ready
+        for profile, nxt in zip(profiles, [*profiles[1:], None], strict=True):
+            try:
+                return self.up(profile, opts, progress)
+            except NoCapacity:
+                if nxt is None:
+                    raise
+                progress(f"{profile.name}: no capacity; trying {nxt.name}")
+        raise ValueError("no profiles to try")
+
     def _capture_failure_logs(self, session: Session, progress: Progress, tail: int = 400) -> None:
         """Save the pod's logs before it is terminated; afterwards they are gone."""
         lines: list[str] = []
@@ -286,7 +306,7 @@ class RunpodPodsProvider:
                 progress(f"no capacity for {profile.gpu_type_id} in {where}: {e.detail}")
         hint = (" The network volume pins the data center; retry later or use --storage ephemeral."
                 if vol else "")
-        raise ProvisionError(f"no capacity for {profile.gpu_type_id}: {'; '.join(errors)}.{hint}")
+        raise NoCapacity(f"no capacity for {profile.gpu_type_id}: {'; '.join(errors)}.{hint}")
 
     def _wait_ready(self, profile: Profile, session: Session, machine: ReadinessMachine,
                     opts: UpOptions, progress: Progress) -> None:

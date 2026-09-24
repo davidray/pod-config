@@ -23,6 +23,7 @@ from qwenbench.hero.ledger import attempts_for, load_binding, log_dispatch, rout
 from qwenbench.hero.policy import resolve
 from qwenbench.metrics.llm import ChatClient, JsonlSink
 from qwenbench.paths import state_dir
+from qwenbench.providers.base import first_ready
 from qwenbench.providers.openai_compat import OpenAICompatibleModel
 
 EXIT = {"completed": 0, "failed": 1, "blocked": 1, "error": 4}
@@ -45,8 +46,7 @@ def run_dispatch(cfg: Config, req: DispatchRequest, project: Path, provider_fact
         msg = (f"role {req.role!r} is not routed to Qwen ({route.reason}). "
                + ("Claude performs this role natively." if route.is_frontier else "It is denied by policy."))
         return _refusal(req, dispatch_id, "policy", msg), 3
-    profile_name = req.profile or route.profile
-    profile = cfg.profile(profile_name)
+    pinned = req.profile or route.profile
 
     key = task_key(req.role, req.task, req.spec_ref)
     prior = attempts_for(project, key)
@@ -65,12 +65,15 @@ def run_dispatch(cfg: Config, req: DispatchRequest, project: Path, provider_fact
         provider = RunpodPodsProvider(cfg)
     else:
         provider = provider_factory(cfg)
-    endpoint = provider.endpoint(profile)
+    endpoint = first_ready(provider, cfg, [pinned] if pinned else cfg.preferred_profiles())
     if endpoint is None:
-        msg = (f"no ready endpoint for profile {profile_name!r}. A human should run `qwenbench up {profile_name}` "
+        wanted = f"profile {pinned!r}" if pinned else f"any of {', '.join(cfg.preferred_profiles())}"
+        msg = (f"no ready endpoint for {wanted}. A human should run `qwenbench up{' ' + pinned if pinned else ''}` "
                "(or check `qwenbench status`). Do not fall back to implementing this with Claude.")
-        log_dispatch(project, event="dispatch-unavailable", dispatch_id=dispatch_id, role=req.role, profile=profile_name)
+        log_dispatch(project, event="dispatch-unavailable", dispatch_id=dispatch_id, role=req.role, profile=pinned)
         return _refusal(req, dispatch_id, "endpoint_unavailable", msg, retryable=True), 4
+    profile_name = endpoint.profile
+    profile = cfg.profile(profile_name)
     health = OpenAICompatibleModel(endpoint).health()
     if not (health["health_ok"] and health["model_listed"]):
         msg = f"endpoint for {profile_name} is not healthy ({health.get('error') or health}); run `qwenbench status {profile_name}`."

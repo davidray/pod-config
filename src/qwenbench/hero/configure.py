@@ -31,7 +31,7 @@ from qwenbench.config import Config
 from qwenbench.hero import heroconfig
 from qwenbench.hero.hooks import decide_pre_tool_use
 from qwenbench.hero.ledger import DIR as ROUTING_DIR
-from qwenbench.hero.policy import route_table
+from qwenbench.hero.policy import resolve, route_table
 from qwenbench.paths import repo_root
 
 MARK = "qwenbench"
@@ -178,17 +178,26 @@ def with_block(text: str, block: str) -> str:
     return text + sep + block
 
 
+ANY_PROFILE = "any"
+
+
+def qwen_model_id(profile: str) -> str:
+    """Hero model id for the execution role: plain "qwen" means any ready profile."""
+    return "qwen" if profile == ANY_PROFILE else f"qwen:{profile}"
+
+
 def plan_configure(cfg: Config, project: Path, execution_profile: str, frontier_model: str,
                    enforce: bool = True) -> Plan:
     project = project.resolve()
-    cfg.profile(execution_profile)  # validate
+    if execution_profile != ANY_PROFILE:
+        cfg.profile(execution_profile)  # validate
     plan = Plan(project)
     if not (project / ".hero").is_dir():
         plan.notes.append("no .hero/ workspace: run `hero init` first (routing still works from hero.local.json)")
 
     local_path = project / ".hero" / "hero.local.json"
     local = heroconfig.read_local(project)
-    roles = {"design": frontier_model, "execution": f"qwen:{execution_profile}", "review": frontier_model}
+    roles = {"design": frontier_model, "execution": qwen_model_id(execution_profile), "review": frontier_model}
     new_local = heroconfig.with_model_roles(local, roles)
     plan.changes.append(FileChange(local_path, heroconfig.render(local) if local else _read(local_path),
                                    heroconfig.render(new_local)))
@@ -295,8 +304,9 @@ def verify(cfg: Config, project: Path, endpoint_check=None) -> list[dict[str, An
     add("hero installed", info["hero_installed"], info["hero_version"] or "hero not on PATH")
     add("hero workspace", info["hero_workspace"], str(project / ".hero"))
     eff = info["models_effective"]["roles"]
-    add("execution role -> qwen", str(eff.get("execution", "")).startswith("qwen:"), f"execution={eff.get('execution')}")
-    add("design/review -> frontier", all(not str(eff.get(r, "")).startswith("qwen:") and eff.get(r)
+    execution = resolve(cfg.policy, "engineer", heroconfig.effective_models(project))
+    add("execution role -> qwen", execution.is_qwen, f"execution={eff.get('execution')}")
+    add("design/review -> frontier", all(not str(eff.get(r, "")).startswith("qwen") and eff.get(r)
                                          for r in ("design", "review")),
         f"design={eff.get('design')} review={eff.get('review')}")
     rc, out = run(["hero", "models", "--check"], project)
@@ -321,7 +331,7 @@ def verify(cfg: Config, project: Path, endpoint_check=None) -> list[dict[str, An
         except (OSError, subprocess.TimeoutExpired) as e:
             add("installed hook denies engineer spawn", False, str(e))
     if endpoint_check:
-        ok, detail = endpoint_check(eff.get("execution", "").removeprefix("qwen:"))
+        ok, detail = endpoint_check(execution.profile)
         add("execution endpoint healthy", ok, detail, warn=not ok)
     rc, out = run(["hero", "check"], project, timeout=180)
     add("hero check", rc == 0, (out.splitlines()[-1] if out else ""), warn=True)

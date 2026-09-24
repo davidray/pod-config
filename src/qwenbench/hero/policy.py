@@ -27,7 +27,7 @@ class Route:
     provider_type: str | None  # "claude" | "openai-compatible" | None
     hero_role: str | None
     model_id: str | None
-    profile: str | None
+    profile: str | None  # for a Qwen route, None means "whichever profile is ready"
     reason: str
 
     @property
@@ -87,10 +87,7 @@ def resolve(policy: RolePolicyFile, agent: str, models: HeroModels) -> Route:
     if matched is None:
         return Route(name, DENY, None, hero_role, model_id, None,
                      f"model id {model_id!r} for Hero role {hero_role!r} matches no provider in role-policy.yaml")
-    provider, ptype, profile = matched
-    if ptype == "openai-compatible" and not profile:
-        return Route(name, DENY, ptype, hero_role, model_id, None,
-                     f"model id {model_id!r} does not name a compute profile (expected e.g. qwen:a6000)")
+    provider, ptype, profile = matched  # profile None: any ready profile, in preference order
     return Route(name, provider, ptype, hero_role, model_id, profile,
                  f"{name} -> Hero role {hero_role} -> {model_id} -> provider {provider}")
 

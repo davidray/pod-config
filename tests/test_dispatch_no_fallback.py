@@ -152,3 +152,34 @@ def test_cli_dispatch_exit_code_and_json(configured_project):
                         "--role", "brownfield-architect", "--task", "design it"], capture_output=True, text=True)
     assert p.returncode == 3
     assert json.loads(p.stdout)["failure"]["kind"] == "policy"
+
+
+class ReadyProfiles:
+    """Only the given profiles have a ready endpoint."""
+
+    def __init__(self, endpoints):
+        self._eps = endpoints
+
+    def endpoint(self, profile):
+        return self._eps.get(profile.name)
+
+
+def test_any_profile_route_uses_whichever_profile_is_ready(cfg, hero_project):
+    from qwenbench.hero import configure as conf
+
+    conf.apply(conf.plan_configure(cfg, hero_project, "any", "claude-opus-5-5"))
+    with FakeOpenAIServer(solving_script()) as srv:
+        ep = Endpoint("l40s", srv.base_url, srv.api_key, srv.model, {"gpu_type_id": "NVIDIA L40S"})
+        result, code = run_dispatch(cfg, req(hero_project), hero_project,
+                                    provider_factory=lambda c: ReadyProfiles({"l40s": ep}))
+    assert code == 0, result.failure
+    assert result.model["route"]["model_id"] == "qwen" and result.model["profile"] == "l40s"
+
+
+def test_any_profile_route_with_nothing_up_fails_fast(cfg, hero_project):
+    from qwenbench.hero import configure as conf
+
+    conf.apply(conf.plan_configure(cfg, hero_project, "any", "claude-opus-5-5"))
+    result, code = run_dispatch(cfg, req(hero_project), hero_project, provider_factory=lambda c: ReadyProfiles({}))
+    assert code == 4 and "any of a6000, l40s" in result.failure.message
+    assert "`qwenbench up`" in result.failure.message

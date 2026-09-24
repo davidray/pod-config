@@ -7,7 +7,13 @@ from qwenbench.readiness import Phase
 from qwenbench.runpod import podspec
 from qwenbench.runpod.client import RunpodClient, RunpodError
 from qwenbench.runpod.models import Pod
-from qwenbench.runpod.provider import GuardViolation, ProvisionError, RunpodPodsProvider, UpOptions
+from qwenbench.runpod.provider import (
+    GuardViolation,
+    NoCapacity,
+    ProvisionError,
+    RunpodPodsProvider,
+    UpOptions,
+)
 from qwenbench.state import load_session, read_events
 from tests.conftest import FAKE_HF_TOKEN
 from tests.fakes import FakeRunpod, pod_json
@@ -258,6 +264,39 @@ def test_capacity_error_with_volume_explains(cfg, patch_model_transport):
     with pytest.raises(ProvisionError, match="ephemeral"):
         prov.up(cfg.profile("a6000"))
     assert not fake.pods
+
+
+def test_up_first_available_falls_through_to_next_profile(cfg, patch_model_transport):
+    fake = FakeRunpod()
+    fake.gpu_availability["NVIDIA RTX A6000"] = "NONE"
+    t = ready_transport()
+    patch_model_transport(t)
+    prov, _ = provider(cfg, fake, t)
+    ep = prov.up_first_available([cfg.profile("a6000"), cfg.profile("l40s")])
+    assert ep.profile == "l40s"
+    assert [b["gpu"]["id"] for b in fake.created] == ["NVIDIA L40S"]
+    assert [v["name"] for v in fake.volumes.values()] == ["qwenbench-hf-cache-l40s"]
+
+
+def test_up_first_available_single_profile_keeps_capacity_error(cfg, patch_model_transport):
+    fake = FakeRunpod()
+    fake.gpu_availability["NVIDIA RTX A6000"] = "NONE"
+    t = ready_transport()
+    patch_model_transport(t)
+    prov, _ = provider(cfg, fake, t)
+    with pytest.raises(NoCapacity, match="NVIDIA RTX A6000"):
+        prov.up_first_available([cfg.profile("a6000")])
+    assert not fake.created
+
+
+def test_up_first_available_reuses_a_ready_profile(cfg, patch_model_transport):
+    fake = FakeRunpod()
+    t = ready_transport()
+    patch_model_transport(t)
+    prov, _ = provider(cfg, fake, t)
+    prov.up(cfg.profile("l40s"))
+    ep = prov.up_first_available([cfg.profile("a6000"), cfg.profile("l40s")])
+    assert ep.profile == "l40s" and len(fake.created) == 1
 
 
 def test_down_is_idempotent_and_down_all(cfg, patch_model_transport):

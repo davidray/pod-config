@@ -16,8 +16,9 @@ providers:
   qwen:
     type: openai-compatible
     compute: runpod
-    # "qwen:a6000" -> profile a6000; "qwen:l40s" -> profile l40s
-    model_pattern: "^qwen:(?P<profile>[a-z0-9-]+)$"
+    # "qwen" -> whichever profile is ready, in runpod.yaml profile_preference order;
+    # "qwen:a6000" / "qwen:l40s" -> that profile only
+    model_pattern: "^qwen(:(?P<profile>[a-z0-9-]+))?$"
   frontier:
     type: claude
     model_pattern: "^(claude|anthropic|opus|sonnet|haiku|fable)"

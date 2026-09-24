@@ -15,6 +15,7 @@ from qwenbench.hero import configure as conf
 from qwenbench.hero import override as ov
 from qwenbench.hero.audit import audit_report
 from qwenbench.hero.dispatch import build_request, run_dispatch
+from qwenbench.providers.base import first_ready
 from qwenbench.providers.openai_compat import OpenAICompatibleModel
 
 hero_app = typer.Typer(help="Hero / Claude Code model routing", no_args_is_help=True)
@@ -49,7 +50,8 @@ def hero_inspect(project: Path = typer.Argument(Path("."))) -> None:
 @hero_app.command("configure")
 def hero_configure(
     project: Path = typer.Argument(Path(".")),
-    execution_profile: str = typer.Option(..., "--execution-profile", help="Compute profile serving Qwen"),
+    execution_profile: str = typer.Option(conf.ANY_PROFILE, "--execution-profile",
+                                          help="Compute profile serving Qwen; 'any' uses whichever is ready"),
     frontier_model: str = typer.Option(conf.DEFAULT_FRONTIER_MODEL, help="Model id for design/review roles"),
     dry_run: bool = typer.Option(False, help="Show the diff only"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Apply without confirmation"),
@@ -84,13 +86,15 @@ def hero_verify(project: Path = typer.Argument(Path("."))) -> None:
     """Prove the routing is wired: Hero config, hooks, simulated decisions, a real hook call, endpoint."""
     c = cfg()
 
-    def endpoint_check(profile: str):
+    def endpoint_check(profile: str | None):
+        names = [profile] if profile else c.preferred_profiles()
         try:
-            ep = provider(c).endpoint(c.profile(profile))
+            ep = first_ready(provider(c), c, names)
         except Exception as e:
             return False, str(e)
         if not ep:
-            return False, f"{profile} is not up (dispatch will fail fast until `qwenbench up {profile}`)"
+            up = f"qwenbench up {profile}" if profile else "qwenbench up"
+            return False, f"{' / '.join(names)} not up (dispatch will fail fast until `{up}`)"
         h = OpenAICompatibleModel(ep).health()
         return bool(h["health_ok"] and h["model_listed"]), json.dumps(h["models"])[:200]
 

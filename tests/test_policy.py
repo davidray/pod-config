@@ -58,9 +58,9 @@ def test_default_model_applies_when_role_missing(cfg):
     assert r.is_qwen and r.profile == "l40s"
 
 
-def test_qwen_model_without_profile_denied(cfg):
+def test_plain_qwen_routes_to_any_profile(cfg):
     r = resolve(cfg.policy, "engineer", HeroModels({"execution": "qwen"}, None))
-    assert r.provider == "deny"
+    assert r.is_qwen and r.profile is None
 
 
 def test_foreign_model_denied(cfg):

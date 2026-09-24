@@ -34,6 +34,12 @@ guards:
   max_gpu_count: 1                  # refuse `up` if it would exceed this many live GPUs
   allow_concurrent_profiles: false  # a6000 and l40s both up at once needs --allow-concurrent
 
+# `qwenbench up` with no profile tries these in order and uses the first with
+# capacity; a Hero role mapped to plain "qwen" uses whichever is ready, in this
+# order. A6000 first: ~40% cheaper per passed task in the 2026-09-24 daveeval
+# run. A no-capacity attempt fails in seconds, so falling through costs little.
+profile_preference: [a6000, l40s]
+
 profiles:
   a6000:
     description: NVIDIA RTX A6000 48GB (Ampere sm_86) - FP8 weights via Marlin W8A16 kernels
