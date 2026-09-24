@@ -220,13 +220,20 @@ def plan_configure(cfg: Config, project: Path, execution_profile: str, frontier_
     md_path = project / "CLAUDE.local.md"
     plan.changes.append(FileChange(md_path, _read(md_path), with_block(_read(md_path), block)))
 
-    exclude = project / ".git" / "info" / "exclude"
-    if (project / ".git").is_dir():
+    exclude = git_exclude_path(project)
+    if exclude:
         old = _read(exclude)
         missing = [e for e in EXCLUDES if e not in old.split("\n")]
         new = old + ("" if not old or old.endswith("\n") else "\n") + "".join(f"{e}\n" for e in missing)
         plan.changes.append(FileChange(exclude, old, new))
     return plan
+
+
+def git_exclude_path(project: Path) -> Path | None:
+    """info/exclude of the repo; in a linked worktree `.git` is a file, so ask git."""
+    p = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], cwd=project,
+                       capture_output=True, text=True)
+    return Path(p.stdout.strip()) / "info" / "exclude" if p.returncode == 0 else None
 
 
 def claude_local_block_for(cfg: Config, models: heroconfig.HeroModels) -> str:
