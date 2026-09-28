@@ -154,7 +154,28 @@ def test_session_start_injects_policy_and_records_baseline(configured_project, c
     assert hooks.main("session-start", json.dumps({"session_id": "s9", "cwd": str(configured_project)})) == 0
     ctx = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["additionalContext"]
     assert "qwenbench dispatch" in ctx and "engineer" in ctx
-    assert (configured_project / ".qwen-routing" / "baseline.json").exists()
+    assert (configured_project / ".qwen-routing" / "baselines" / "s9.json").exists()
+
+
+def test_first_pre_tool_use_records_a_baseline_when_session_started_elsewhere(configured_project, monkeypatch):
+    from qwenbench.hero.audit import baseline
+
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(configured_project))
+    hooks.main("pre-tool-use", json.dumps({**ev(configured_project, "Read", file_path="src/app.py"),
+                                           "session_id": "moved-in"}))
+    tree, desc = baseline(configured_project, "moved-in")
+    assert tree and "moved-in" in desc
+
+
+def test_verify_round_trip_is_not_a_session(cfg, configured_project, monkeypatch):
+    from qwenbench.hero.audit import audit_report
+
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(configured_project))
+    hooks.main("pre-tool-use", json.dumps({**ev(configured_project, "Agent", subagent_type="engineer"),
+                                           "session_id": "qwen-hero-verify"}))
+    rep = audit_report(configured_project, cfg.policy)
+    assert rep["hooked_sessions"] == [] and not rep["denied"]
+    assert "HEAD" in rep["baseline"]
 
 
 def test_stop_hook_flags_unattributed_code_changes(configured_project, capsys, monkeypatch):

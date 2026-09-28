@@ -183,3 +183,56 @@ def test_any_profile_route_with_nothing_up_fails_fast(cfg, hero_project):
     result, code = run_dispatch(cfg, req(hero_project), hero_project, provider_factory=lambda c: ReadyProfiles({}))
     assert code == 4 and "any of a6000, a40, l40s" in result.failure.message
     assert "`qwenbench up`" in result.failure.message
+
+
+def test_passing_by_commenting_out_tests_fails_the_dispatch(cfg, configured_project):
+    script = [
+        Turn(tool_calls=[tool_call("write_file", path="tests/test_app.py",
+                                   content="# def test_add():\n#     assert add(2, 3) == 5\n")]),
+        Turn(tool_calls=[tool_call("finish", status="completed", summary="tests pass")]),
+    ]
+    with FakeOpenAIServer(script) as srv:
+        ep = Endpoint("a6000", srv.base_url, srv.api_key, srv.model)
+        result, code = run_dispatch(cfg, req(configured_project, validate=["true"]), configured_project,
+                                    provider_factory=lambda c: FakeProvider(ep))
+    assert code == 1 and result.status == "failed"
+    assert result.failure.kind == "tests_disabled" and "tests/test_app.py" in result.failure.message
+    assert result.warnings
+
+
+def test_hero_workspace_changes_are_not_attributed_to_the_worker(cfg, configured_project):
+    (configured_project / ".hero" / "NEXT.md").write_text("before\n")
+
+    turns = iter(solving_script())
+
+    def next_turn_while_hero_rewrites_next_md(_request):
+        (configured_project / ".hero" / "NEXT.md").write_text("rewritten by a Hero hook mid-dispatch\n")
+        return next(turns)
+
+    with FakeOpenAIServer(next_turn_while_hero_rewrites_next_md) as srv:
+        ep = Endpoint("a6000", srv.base_url, srv.api_key, srv.model)
+        result, code = run_dispatch(cfg, req(configured_project), configured_project,
+                                    provider_factory=lambda c: FakeProvider(ep))
+    assert code == 0
+    assert [f.path for f in result.files_changed] == ["src/app.py"]
+
+
+def test_audit_separates_qwen_override_and_unattributed_changes(cfg, configured_project, monkeypatch):
+    from qwenbench.hero import hooks, override
+    from qwenbench.hero.audit import attribution
+
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(configured_project))
+    hooks.main("session-start", json.dumps({"session_id": "s", "cwd": str(configured_project)}))
+    with FakeOpenAIServer(solving_script()) as srv:
+        ep = Endpoint("a6000", srv.base_url, srv.api_key, srv.model)
+        run_dispatch(cfg, req(configured_project), configured_project, provider_factory=lambda c: FakeProvider(ep))
+    override.grant(configured_project, "main-thread", "edits", "qwen hit its limit", ttl_s=60, granted_by="dave")
+    edit = {"session_id": "s", "cwd": str(configured_project), "tool_name": "Write",
+            "tool_input": {"file_path": str(configured_project / "src" / "extra.py")}}
+    assert hooks.main("pre-tool-use", json.dumps(edit)) == 0
+    (configured_project / "src" / "extra.py").write_text("x = 1\n")
+    (configured_project / "src" / "sneaky.py").write_text("y = 2\n")
+    subprocess.run(["git", "add", "-A"], cwd=configured_project, check=True)
+    subprocess.run(["git", "commit", "-qm", "work"], cwd=configured_project, check=True)  # commits stay visible
+    assert attribution(configured_project, cfg.policy) == {
+        "src/app.py": "qwen", "src/extra.py": "claude-override", "src/sneaky.py": "unattributed"}

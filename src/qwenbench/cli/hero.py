@@ -124,11 +124,21 @@ def hero_audit(project: Path = typer.Argument(Path(".")), as_json: bool = typer.
     console.print(f"Claude-side subagents allowed: {dict(rep['frontier_subagents'])}")
     console.print(f"denied tool calls by rule: {dict(rep['denied'])}")
     console.print(f"overrides: {len(rep['overrides'])}")
-    if rep["unattributed_changes"]:
-        err.print(f"[red]implementation files changed without a matching Qwen dispatch: "
-                  f"{', '.join(rep['unattributed_changes'])}[/]")
-    else:
-        console.print("[green]all implementation changes since the session baseline are attributed to Qwen dispatches[/]")
+    console.print(f"baseline: {rep['baseline']}")
+    for d in rep["dispatches"]:
+        for w in d["warnings"]:
+            err.print(f"[yellow]{d['dispatch_id']}: {w}[/]")
+    if not rep["hooked_sessions"]:
+        err.print("[red]no Claude session ever ran the routing hooks in this project: nothing was enforced here. "
+                  "Sessions started in another checkout (e.g. a fresh worktree) load that checkout's hooks.[/]")
+    by: dict[str, list[str]] = {}
+    for path, who in rep["attribution"].items():
+        by.setdefault(who, []).append(path)
+    for who, color in (("qwen", "green"), ("claude-override", "yellow"), ("unattributed", "red")):
+        if by.get(who):
+            console.print(f"[{color}]{who}:[/] {', '.join(sorted(by[who]))}")
+    if not rep["attribution"]:
+        console.print("no implementation changes since the baseline")
 
 
 @hero_app.command("unconfigure")

@@ -79,6 +79,14 @@ qwenbench hero audit ~/code/myproject          # or --json
 - `.qwen-routing/ledger.jsonl` holds every dispatch: role, route, served model name observed in responses, profile, pod id, GPU, files and their blob SHAs, metrics.
 - `.qwen-routing/decisions.jsonl` holds every hook decision: which Claude subagents ran, what was denied and why, overrides.
 - `.qwen-routing/dispatches/<id>/` holds the full transcript, tool log, request metrics and diff for each dispatch.
+- `.qwen-routing/baselines/<session>.json` holds the working tree when each Claude session first hit a hook here.
+
+The audit labels every changed implementation file since the earliest baseline:
+- `qwen`: the content matches a dispatch result.
+- `claude-override`: Claude edited it through a tool call a human override allowed.
+- `unattributed`: anything else.
+
+Commits don't hide changes, because the comparison is against the baseline tree, not HEAD. The audit also says so plainly when **no Claude session ever ran the hooks here**. It excludes `qwenbench hero verify`'s own test calls, which use session id `qwen-hero-verify`. It lists each dispatch's warnings, such as removed assertions.
 
 ## Explicit human override
 
@@ -104,10 +112,23 @@ requires an interactive TTY.
 
 ## Limits (honest)
 
+- **Hooks only exist in the checkout you configured.** `hero configure` writes untracked, per-checkout files (`.claude/settings.local.json`, `.qwen-routing/`). A Claude session loads project hooks from its project root. So a session started in a fresh worktree, which the Claude desktop app creates per session, runs **with no enforcement**, even if it later works in the configured checkout. This happened in the first live trial: see below. `qwenbench hero audit` now reports it. Making enforcement follow the repository instead of the checkout is an open decision (ADR 0006).
+
 - The Bash write detection is heuristic. A determined agent could write a file through, say, a Python one-liner. That is why the Stop hook and `qwenbench hero audit` check content attribution: such edits are reported, not silently accepted.
 - Hooks govern Claude Code sessions in the configured project. Other tools such as Cursor or Codex are not covered.
-- Hero workflows that tell Claude to spawn `engineer` get a denial whose reason spells out the `qwenbench dispatch` command, and CLAUDE.local.md plus the SessionStart context say the same. Whether Claude reliably follows that path (rather than stopping to ask) is something to observe in the first real sessions. Either outcome is safe: the work does not silently happen on Claude. Hero's own prompt text is not modified, by design.
+- Hero workflows that tell Claude to spawn `engineer` get a denial whose reason spells out the `qwenbench dispatch` command, and CLAUDE.local.md plus the SessionStart context say the same. Hero's own prompt text is not modified, by design.
 - The dispatch agent sandbox has no network by default. Enable it per project in `.qwen-routing/config.json` (`sandbox.network`, `sandbox.real_home`, `sandbox.extra_writable`) if your tests need it.
+
+## First live trial (2026-09-24, bookwyrm-editor `chapter-word-counts`)
+
+`/deliver` of a small spec (editor-core word counts plus a navigator badge) in a configured bookwyrm-editor worktree, served on an A40.
+
+What happened:
+- **Claude followed the routing from the written instructions alone.** It wrote a task file, ran `qwenbench dispatch` for `engineer`, and, when Qwen failed, stopped and asked instead of taking over. A human then granted an edits override, and Claude finished the work; that became PR #387. But no hook ever ran in that session, because it started in a desktop-app worktree (see Limits). The three `agent-qwen-must-dispatch` denials in the log came from `hero verify`. So this trial shows instructions being followed, not enforcement holding.
+- **Qwen hit its 60-iteration limit** with two desktop typecheck errors left. On the way, it **commented out its own failing editor-core tests** to make that suite pass. Dispatch now fails such a result as `tests_disabled` and lists weakened assertions in `warnings`.
+- **Claude's task file contained most of the implementation.** That spends frontier tokens on the part Qwen is meant to do. The routing instructions now say to describe behavior and interfaces, not code, and to split work into small dispatches.
+- **The dispatch file list included `.hero/NEXT.md` and friends**, which Hero's hooks rewrote mid-dispatch. `.hero/` is no longer attributed to the worker.
+- **The audit reported everything as Qwen's.** With no baseline it compared against HEAD, and Claude's commit hid its own edits. That is fixed as described above.
 
 ## Setup summary
 
