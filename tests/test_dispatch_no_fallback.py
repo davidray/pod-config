@@ -175,6 +175,20 @@ def test_any_profile_route_uses_whichever_profile_is_ready(cfg, hero_project):
     assert result.model["route"]["model_id"] == "qwen" and result.model["profile"] == "l40s"
 
 
+def test_a_dead_ready_session_does_not_shadow_a_live_profile(cfg, hero_project):
+    """Second live trial: a stopped a6000 still looked ready and dispatch never reached the running a40."""
+    from qwenbench.hero import configure as conf
+
+    conf.apply(conf.plan_configure(cfg, hero_project, "any", "claude-opus-5-5"))
+    dead = Endpoint("a6000", "http://127.0.0.1:9/v1", "k" * 20, "qwen3-coder-30b-a3b-fp8")  # nothing listens
+    with FakeOpenAIServer(solving_script()) as srv:
+        live = Endpoint("a40", srv.base_url, srv.api_key, srv.model)
+        result, code = run_dispatch(cfg, req(hero_project), hero_project,
+                                    provider_factory=lambda c: ReadyProfiles({"a6000": dead, "a40": live}))
+    assert code == 0, result.failure
+    assert result.model["profile"] == "a40"
+
+
 def test_any_profile_route_with_nothing_up_fails_fast(cfg, hero_project):
     from qwenbench.hero import configure as conf
 

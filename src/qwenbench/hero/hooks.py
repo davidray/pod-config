@@ -115,14 +115,46 @@ PATCH_RE = re.compile(r"\b(git\s+(apply|am|checkout\s+[^;&|]*--\s)|patch\s)")
 OVERRIDE_RE = re.compile(r"\bqwen(bench)?\s+(override|hero\s+(unconfigure|uninstall-hooks|install-hooks|configure))\b")
 
 
+HEREDOC_RE = re.compile(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n.*?\n\s*\2\s*(?:\n|$)", re.S)
+QUOTED_RE = re.compile(r"'[^']*'|\"(?:\\.|[^\"\\])*\"")
+ASSIGN_RE = re.compile(r"(?:^|[;&|\s])([A-Za-z_]\w*)=([^\s;&|'\"]+)")
+
+
+def _shell_code(command: str) -> str:
+    """The command without heredoc bodies and quoted strings, which are data, not redirects.
+
+    `git commit -m "... <noreply@anthropic.com>"` and heredoc text like `x > 0` used to be
+    read as writes (second live trial).
+    """
+    code = HEREDOC_RE.sub(lambda m: m.group(0).split("\n", 1)[0] + "\n", command)
+    return QUOTED_RE.sub("''", code)
+
+
+def _expand(target: str, assigned: dict[str, str]) -> str | None:
+    """Substitute variables assigned earlier in the same command; None if one stays unknown."""
+    out = re.sub(r"\$\{?(\w+)\}?", lambda m: assigned.get(m.group(1), m.group(0)), target)
+    return None if "$" in out else out
+
+
 def _bash_write_targets(command: str) -> tuple[list[str], str | None]:
-    """Best-effort extraction of files a shell command writes. Returns (paths, blanket_reason)."""
+    """Best-effort extraction of files a shell command writes. Returns (paths, blanket_reason).
+
+    Heuristic by nature: targets through unknown variables are skipped, and content
+    attribution (`qwenbench hero audit`) is what catches anything missed.
+    """
     if PATCH_RE.search(command):
         return [], "applying patches/checkouts from the shell can rewrite implementation files"
-    targets = [m.group(1) for m in REDIRECT_RE.finditer(command)]
-    targets += [m.group(1) for m in TEE_RE.finditer(command)]
-    targets += [m.group(1) for m in INPLACE_RE.finditer(command)]
-    return [t.strip("'\"") for t in targets if t not in ("/dev/null", "/dev/stderr", "/dev/stdout")], None
+    code = _shell_code(command)
+    assigned = dict(ASSIGN_RE.findall(code))
+    raw = [m.group(1) for m in REDIRECT_RE.finditer(code)]
+    raw += [m.group(1) for m in TEE_RE.finditer(code)]
+    raw += [m.group(1) for m in INPLACE_RE.finditer(code)]
+    targets = []
+    for t in raw:
+        t = _expand(t.strip("'\""), assigned)
+        if t and t not in ("/dev/null", "/dev/stderr", "/dev/stdout"):
+            targets.append(t)
+    return targets, None
 
 
 def decide_pre_tool_use(event: dict[str, Any], policy: RolePolicyFile, project: Path) -> Decision:
@@ -223,9 +255,12 @@ def routing_rules(qwen_model: str | None, qwen_roles: list[str], frontier_roles:
         "2. The task file states behavior, interfaces (signatures, types), files to touch, constraints, acceptance "
         "criteria and the validation commands. Do not write the implementation code in it: that is the worker's job.\n"
         "3. Run `qwenbench dispatch --project \"$CLAUDE_PROJECT_DIR\" --role <role> --task-file <file> "
-        "--validate '<cmd>' [--spec <slug>]` and read the JSON DispatchResult.\n"
+        "--validate '<cmd>' [--spec <slug>]` and read the JSON DispatchResult. A dispatch takes several minutes: "
+        "run it in the background (or with a timeout of at least 15 minutes) and wait for it, or it is killed "
+        "mid-run and leaves partial edits.\n"
         "4. Review the diff. Reject the result if `failure.kind` is `tests_disabled` or `warnings` is non-empty "
-        "until you have checked each warning; tests that are commented out, skipped or weakened are not a pass.\n"
+        "until you have checked each warning; tests that are commented out, skipped or weakened are not a pass. "
+        "Commit reviewed work with git as usual.\n"
         "5. If a unit fails beyond the retry policy, stop and report it. Do not implement it yourself or hand it "
         "to a Claude subagent: only the human can authorize that with `qwenbench override grant` in their own "
         "terminal.\n"

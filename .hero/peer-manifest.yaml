@@ -4,5 +4,5 @@ schema: 1
 contracts_version: 2
 repo:
     peer_id: b6d538d1-8c68-403d-b10d-d17a22faf36f
-    name: stale-session-reuse
-generated_at: 2026-09-29T09:59:13.700306Z
+    name: trial2-fixes
+generated_at: 2026-09-29T13:12:56.251538Z

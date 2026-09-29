@@ -95,6 +95,13 @@ def test_edit_outside_project_not_governed(cfg, configured_project, tmp_path):
     ("git checkout HEAD -- src/app.py", False),
     ("qwenbench override grant --role engineer --reason x", False),
     ("echo x > .claude/settings.local.json", False),
+    # second live trial: quoted text and heredoc bodies are data, not redirects
+    ('git add src && git commit -qm "Add x\n\nCo-Authored-By: Claude <noreply@anthropic.com>"', True),
+    ("cat > docs/task.md <<'EOF'\nCount days with wordsWritten > 0.\nEOF", True),
+    ("S=/tmp/scratch; qwenbench dispatch --task-file t.md > $S/r4.out 2>&1", True),
+    ("cat > src/app.py <<'EOF'\nx = 1\nEOF", False),
+    ("F=src/app.py; echo x > $F", False),
+    ('echo "unquoted target" > src/app.py', False),
 ])
 def test_bash_rules(cfg, configured_project, cmd, allowed):
     d = decide_pre_tool_use(ev(configured_project, "Bash", command=cmd), cfg.policy, configured_project)
