@@ -143,6 +143,7 @@ tests/
 - [docs/architecture.md](docs/architecture.md): components and data flow
 - [docs/runpod-setup.md](docs/runpod-setup.md): account, key, storage, startup, cleanup
 - [docs/benchmarking.md](docs/benchmarking.md): writing cases, running, reading metrics
+- [docs/live-trials.md](docs/live-trials.md): real Hero `/deliver` trials and the verdict on routing to Qwen
 - [docs/hero-routing.md](docs/hero-routing.md): model policy, enforcement, override procedure
 - [docs/agent-protocol.md](docs/agent-protocol.md): the dispatch contract
 - [docs/COSTS.md](docs/COSTS.md): GPU vs storage costs, estimated vs authoritative

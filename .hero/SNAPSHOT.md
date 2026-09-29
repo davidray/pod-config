@@ -1,6 +1,6 @@
-# Project Snapshot — trial2-fixes
+# Project Snapshot — trial-report
 
-_Last refreshed: 2026-09-29T13:12:56Z · projected from 1 source nodes_
+_Last refreshed: 2026-09-29T21:00:24Z · projected from 1 source nodes_
 
 ## Surfaces
 
