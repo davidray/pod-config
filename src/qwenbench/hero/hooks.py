@@ -38,7 +38,13 @@ from typing import Any
 from qwenbench.config import RolePolicyFile
 from qwenbench.hero import override as overrides
 from qwenbench.hero.heroconfig import effective_models
-from qwenbench.hero.ledger import enforcement_active, log_decision
+from qwenbench.hero.ledger import (
+    enforcement_active,
+    git_toplevel,
+    load_binding,
+    log_decision,
+    repo_binding_path,
+)
 from qwenbench.hero.policy import Route, resolve
 
 AGENT_TOOLS = {"Agent", "Task"}
@@ -105,7 +111,8 @@ REDIRECT_RE = re.compile(r"(?<![0-9&<>])>{1,2}\s*([^\s;&|<>]+)")
 TEE_RE = re.compile(r"\btee\s+(?:-a\s+)?([^\s;&|]+)")
 INPLACE_RE = re.compile(r"\b(?:sed|gsed|perl|ruby)\b[^;&|]*\s-[a-zA-Z]*i[a-zA-Z]*\b[^;&|]*?\s([^\s;&|]+)\s*(?:$|[;&|])")
 PATCH_RE = re.compile(r"\b(git\s+(apply|am|checkout\s+[^;&|]*--\s)|patch\s)")
-OVERRIDE_RE = re.compile(r"\bqwen(bench)?\s+override\b")
+# Commands that grant overrides or switch enforcement off: humans only.
+OVERRIDE_RE = re.compile(r"\bqwen(bench)?\s+(override|hero\s+(unconfigure|uninstall-hooks|install-hooks|configure))\b")
 
 
 def _bash_write_targets(command: str) -> tuple[list[str], str | None]:
@@ -145,6 +152,9 @@ def decide_pre_tool_use(event: dict[str, Any], policy: RolePolicyFile, project: 
 
     if tool in EDIT_TOOLS:
         for target in _edit_targets(tool, tin):
+            if _protected_outside(target, project, event.get("cwd")):
+                return Decision(False, f"{target} is qwenbench routing configuration; only a human may change it.",
+                                "protected-path", caller)
             rel = _rel(project, target, event.get("cwd"))
             if rel is None or rel.startswith(".."):
                 continue  # outside the project: not our boundary
@@ -171,8 +181,9 @@ def decide_pre_tool_use(event: dict[str, Any], policy: RolePolicyFile, project: 
     if tool == "Bash":
         cmd = tin.get("command") or ""
         if OVERRIDE_RE.search(cmd):
-            return Decision(False, "Overrides are human-only. Ask the human to run `qwenbench override grant` in their "
-                            "own terminal if they want Claude to take over a Qwen-assigned role.",
+            return Decision(False, "Overrides and routing configuration are human-only. Ask the human to run "
+                            "`qwenbench override grant` in their own terminal if they want Claude to take over a "
+                            "Qwen-assigned role.",
                             "override-human-only", caller)
         if caller and caller.is_qwen:
             return Decision(True, "implementation role (override)", "bash-impl-role", caller)
@@ -183,6 +194,8 @@ def decide_pre_tool_use(event: dict[str, Any], policy: RolePolicyFile, project: 
             return Decision(False, f"{blanket}. Implementation changes go through `qwenbench dispatch`.",
                             "bash-patch-denied", caller)
         for t in targets:
+            if _protected_outside(t, project, event.get("cwd")):
+                return Decision(False, f"{t} is qwenbench routing configuration.", "protected-path", caller)
             rel = _rel(project, t, event.get("cwd"))
             if rel is None or rel.startswith(".."):
                 continue
@@ -230,7 +243,33 @@ def session_context(policy: RolePolicyFile, project: Path) -> str:
 
 
 def _project_root(event: dict[str, Any]) -> Path:
-    return Path(os.environ.get("CLAUDE_PROJECT_DIR") or event.get("cwd") or os.getcwd())
+    """The repository the session is working in right now.
+
+    Prefer the event's cwd over CLAUDE_PROJECT_DIR: a session can start in one
+    checkout (e.g. a fresh desktop-app worktree) and move into another. A file
+    edit in a different bound repository is judged by that repository.
+    """
+    start = Path(event.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
+    project = git_toplevel(start) or start
+    for target in _edit_targets(event.get("tool_name") or "", event.get("tool_input") or {}):
+        p = Path(target) if Path(target).is_absolute() else start / target
+        other = git_toplevel(p)
+        if other and other != project and load_binding(other):
+            return other
+    return project
+
+
+def _protected_outside(path: str, project: Path, cwd: str | None) -> bool:
+    """Routing files that live outside the checkout: the repo binding and the user-level hooks."""
+    from qwenbench.hero import userhook
+
+    p = Path(path) if Path(path).is_absolute() else Path(cwd or project) / path
+    real = os.path.realpath(p)
+    guarded = [userhook.settings_path(), userhook.wrapper_path()]
+    binding = repo_binding_path(project)
+    if binding:
+        guarded.append(binding.parent)
+    return any(real == os.path.realpath(g) or real.startswith(os.path.realpath(g) + os.sep) for g in guarded)
 
 
 def main(kind: str, stdin: str | None = None) -> int:

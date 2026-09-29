@@ -136,15 +136,14 @@ def test_attempt_budget_forces_escalation(cfg, configured_project):
 
 def test_agent_cannot_write_routing_config_during_dispatch(cfg, configured_project):
     script = [
-        Turn(tool_calls=[tool_call("write_file", path=".qwen-routing/config.json", content='{"enforce": false}')]),
-        Turn(tool_calls=[tool_call("run_command", command="echo '{}' > .claude/settings.local.json")]),
+        Turn(tool_calls=[tool_call("write_file", path=".git/qwenbench/config.json", content='{"enforce": false}')]),
+        Turn(tool_calls=[tool_call("run_command", command="echo '{}' > .git/qwenbench/config.json")]),
         Turn(tool_calls=[tool_call("finish", status="failed", summary="tried to disable routing")]),
     ]
     with FakeOpenAIServer(script) as srv:
         ep = Endpoint("a6000", srv.base_url, srv.api_key, srv.model)
         run_dispatch(cfg, req(configured_project), configured_project, provider_factory=lambda c: FakeProvider(ep))
-    assert json.loads((configured_project / ".qwen-routing" / "config.json").read_text())["enforce"] is True
-    assert "qwenbench" in (configured_project / ".claude" / "settings.local.json").read_text()
+    assert json.loads((configured_project / ".git" / "qwenbench" / "config.json").read_text())["enforce"] is True
 
 
 def test_cli_dispatch_exit_code_and_json(configured_project):

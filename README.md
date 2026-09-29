@@ -98,6 +98,7 @@ See [docs/benchmarking.md](docs/benchmarking.md).
 ```bash
 qwenbench up                                                          # first of a6000, l40s with capacity
 qwenbench hero inspect ~/code/myproject                               # roles, agents, routes (read-only)
+qwenbench hero install-hooks                                          # once per machine: user-level Claude Code hooks
 qwenbench hero configure ~/code/myproject                             # shows the diff, asks, applies
 qwenbench hero verify ~/code/myproject                                # proves the wiring, incl. a real hook call
 # work in Claude Code as usual; afterwards:

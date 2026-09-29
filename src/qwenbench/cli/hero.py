@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 import getpass
 import json
 from pathlib import Path
@@ -13,6 +14,7 @@ from qwenbench.cli.common import cfg, console, err, is_tty, provider
 from qwenbench.config import parse_duration
 from qwenbench.hero import configure as conf
 from qwenbench.hero import override as ov
+from qwenbench.hero import userhook
 from qwenbench.hero.audit import audit_report
 from qwenbench.hero.dispatch import build_request, run_dispatch
 from qwenbench.providers.base import first_ready
@@ -141,10 +143,36 @@ def hero_audit(project: Path = typer.Argument(Path(".")), as_json: bool = typer.
         console.print("no implementation changes since the baseline")
 
 
+@hero_app.command("install-hooks")
+def hero_install_hooks(yes: bool = typer.Option(False, "--yes", "-y", help="Apply without confirmation")) -> None:
+    """Install the user-level Claude Code hooks that enforce routing in every checkout of a configured repo."""
+    old, new = userhook.planned_settings()
+    diff = "".join(difflib.unified_diff(old.splitlines(keepends=True), new.splitlines(keepends=True),
+                                        fromfile=f"a/{userhook.settings_path()}", tofile=f"b/{userhook.settings_path()}"))
+    console.print(diff or "settings already contain the qwenbench hooks", markup=False, highlight=False)
+    console.print(f"gate script: {userhook.wrapper_path()} (exits at once in repos without a qwenbench binding)")
+    if not yes and not typer.confirm("install?"):
+        raise typer.Exit(1)
+    userhook.install()
+    console.print("installed. Claude Code sessions started from now on pick it up.")
+
+
+@hero_app.command("uninstall-hooks")
+def hero_uninstall_hooks() -> None:
+    """Remove the user-level hooks (nothing is enforced anywhere afterwards)."""
+    userhook.uninstall()
+    console.print("removed the qwenbench hooks from ~/.claude/settings.json")
+
+
 @hero_app.command("unconfigure")
 def hero_unconfigure(project: Path = typer.Argument(Path("."))) -> None:
-    """Stop enforcing (keeps the evidence logs). Remove hooks from settings.local.json."""
+    """Stop enforcing in this repository (keeps the evidence logs)."""
     project = project.resolve()
+    for b in (conf.binding_path_for(project), project / ".qwen-routing" / "config.json"):
+        if b.exists():
+            d = json.loads(b.read_text())
+            d["enforce"] = False
+            b.write_text(json.dumps(d, indent=2) + "\n")
     s = project / ".claude" / "settings.local.json"
     if s.exists():
         data = json.loads(s.read_text())
@@ -153,11 +181,6 @@ def hero_unconfigure(project: Path = typer.Argument(Path("."))) -> None:
             if not data["hooks"][event]:
                 del data["hooks"][event]
         s.write_text(json.dumps(data, indent=2) + "\n")
-    b = project / ".qwen-routing" / "config.json"
-    if b.exists():
-        d = json.loads(b.read_text())
-        d["enforce"] = False
-        b.write_text(json.dumps(d, indent=2) + "\n")
     console.print("enforcement disabled; hero.local.json model roles left as-is (edit or delete them if desired)")
 
 

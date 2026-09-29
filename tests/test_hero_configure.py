@@ -21,7 +21,7 @@ def test_plan_shows_diff_and_preserves_unrelated_settings(cfg, hero_project):
     plan = conf.plan_configure(cfg, hero_project, "a6000", "claude-opus-5-5")
     diff = plan.diff()
     assert '"execution": "qwen:a6000"' in diff
-    assert "hero.local.json" in diff and "settings.local.json" in diff and "CLAUDE.local.md" in diff
+    assert "hero.local.json" in diff and "qwenbench/config.json" in diff and "CLAUDE.local.md" in diff
     before = digest(hero_owned(hero_project))
     conf.apply(plan)
     local = json.loads((hero_project / ".hero" / "hero.local.json").read_text())
@@ -41,17 +41,15 @@ def test_switching_profile_changes_only_the_execution_role(cfg, configured_proje
     assert '-      "execution": "qwen:a6000"' in diff and '+      "execution": "qwen:l40s"' in diff
 
 
-def test_user_hooks_preserved_and_ours_replaced(cfg, hero_project):
+def test_old_per_checkout_hooks_removed_and_user_hooks_kept(cfg, hero_project):
     s = hero_project / ".claude" / "settings.local.json"
-    s.write_text(json.dumps({"permissions": {"allow": ["Bash(make:*)"]},
-                             "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command",
-                                                                                   "command": "my-guard"}]}]}}))
+    s.write_text(json.dumps({"permissions": {"allow": ["Bash(make:*)"]}, "hooks": {"PreToolUse": [
+        {"matcher": "Bash", "hooks": [{"type": "command", "command": "my-guard"}]},
+        {"matcher": "Agent", "added_by": "qwenbench", "hooks": [{"type": "command", "command": "old"}]}]}}))
     for _ in range(2):
         conf.apply(conf.plan_configure(cfg, hero_project, "a6000", "claude-opus-5-5"))
     data = json.loads(s.read_text())
-    pre = data["hooks"]["PreToolUse"]
-    assert [h["hooks"][0]["command"] for h in pre if h.get("added_by") != "qwenbench"] == ["my-guard"]
-    assert len([h for h in pre if h.get("added_by") == "qwenbench"]) == 1
+    assert [h["hooks"][0]["command"] for h in data["hooks"]["PreToolUse"]] == ["my-guard"]
     assert data["permissions"]["allow"] == ["Bash(make:*)"]
 
 

@@ -31,21 +31,31 @@ Always with a diff first, and a backup (`*.qwenbench.bak`) of anything it overwr
 
 | File | Change | Owner |
 |---|---|---|
-| `.hero/hero.local.json` | `models.roles.{design,review}` = frontier model, `execution` = `qwen:<profile>`; every other key preserved | Hero's documented local overlay (git-ignored) |
-| `.claude/settings.local.json` | PreToolUse / SessionStart / Stop hooks tagged `"added_by": "qwenbench"`; user entries preserved | yours (Hero never writes it) |
+| `<git common dir>/qwenbench/config.json` | the binding: enforce flag, profile, roles, agent sandbox options. Every worktree of the repo sees it, and git never tracks it | qwenbench |
+| `.hero/hero.local.json` | `models.roles.{design,review}` = frontier model, `execution` = `qwen` (or `qwen:<profile>`); every other key preserved | Hero's documented local overlay (git-ignored) |
+| `.claude/settings.local.json` | removes per-checkout qwenbench hooks left by older versions; user entries preserved | yours |
 | `CLAUDE.local.md` | a fenced `qwenbench:routing` block | yours |
-| `.qwen-routing/config.json` | binding: enforce flag, profile, agent sandbox options | qwenbench |
-| `.git/info/exclude` | keeps the above out of git without editing `.gitignore` | yours |
+| `.git/info/exclude` | keeps local files out of git without editing `.gitignore` | yours |
 
 Nothing Hero owns is touched. A forced `hero install project . --target
 claude --force` was run over a configured project in testing and left every
 qwenbench file byte-identical. Then `hero models --check` and `hero check`
 are run to validate the result with Hero's own tooling.
 
-Personal settings (which GPU, the hook path) live in local files, so
-teammates without Qwen are unaffected. To enforce it for a whole team, commit
-the same hooks into `.claude/settings.json`. Hero preserves non-Hero entries
-there too.
+### The hooks are user-level (`qwenbench hero install-hooks`, once per machine)
+
+Claude Code loads project hooks from a session's project root. The desktop app
+starts each session in a fresh worktree, which has none of a checkout's
+untracked files, so per-checkout hooks silently never ran in the first live
+trial (see below and ADR 0006). The hooks therefore live in
+`~/.claude/settings.json`, tagged `"added_by": "qwenbench"`, and call a small
+gate script (`~/.local/state/qwenbench/claude-hook.sh`):
+
+- **Where it acts:** the gate hands off to qwenbench only when the session's repository has a binding. It checks the event's `cwd` and `CLAUDE_PROJECT_DIR`. Anywhere else it exits after one `git` call, about 28 ms median per governed tool call, measured.
+- **How it picks the project:** qwenbench judges the repository the session is working in right now, which is the event `cwd`, not where the session started. A file edit in another bound repository is judged by that repository.
+- **What Claude can't touch:** the binding, `~/.claude/settings.json` and the gate script are protected. `qwenbench hero configure|unconfigure|install-hooks|uninstall-hooks` and `qwenbench override` are denied to Claude.
+- **Scope:** the binding covers **every checkout of the repository on this machine**. If you only want to route a trial, use a separate clone, not a worktree of your working repo.
+- **Removing it:** `qwenbench hero uninstall-hooks` removes the hooks everywhere; `qwenbench hero unconfigure DIR` stops enforcement for one repository.
 
 ## How enforcement actually works
 
@@ -112,7 +122,8 @@ requires an interactive TTY.
 
 ## Limits (honest)
 
-- **Hooks only exist in the checkout you configured.** `hero configure` writes untracked, per-checkout files (`.claude/settings.local.json`, `.qwen-routing/`). A Claude session loads project hooks from its project root. So a session started in a fresh worktree, which the Claude desktop app creates per session, runs **with no enforcement**, even if it later works in the configured checkout. This happened in the first live trial: see below. `qwenbench hero audit` now reports it. Making enforcement follow the repository instead of the checkout is an open decision (ADR 0006).
+- Enforcement needs the user-level hooks (`qwenbench hero install-hooks`). Without them nothing is enforced, and `qwenbench hero verify` fails. A session with no hooks is what the first live trial ran as; `qwenbench hero audit` reports it.
+- Evidence (`.qwen-routing/`) is written in the checkout where the work happens, so audit each checkout you worked in.
 
 - The Bash write detection is heuristic. A determined agent could write a file through, say, a Python one-liner. That is why the Stop hook and `qwenbench hero audit` check content attribution: such edits are reported, not silently accepted.
 - Hooks govern Claude Code sessions in the configured project. Other tools such as Cursor or Codex are not covered.
@@ -135,6 +146,7 @@ What happened:
 ```bash
 qwenbench up
 qwenbench hero inspect   ~/code/myproject
+qwenbench hero install-hooks                   # once per machine: user-level hooks
 qwenbench hero configure ~/code/myproject
 qwenbench hero verify    ~/code/myproject
 # ...use Claude Code with Hero as usual...
