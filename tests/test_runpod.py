@@ -14,7 +14,7 @@ from qwenbench.runpod.provider import (
     RunpodPodsProvider,
     UpOptions,
 )
-from qwenbench.state import load_session, read_events
+from qwenbench.state import load_session, read_events, save_session
 from tests.conftest import FAKE_HF_TOKEN
 from tests.fakes import FakeRunpod, pod_json
 
@@ -226,6 +226,19 @@ def test_guard_refuses_second_gpu(cfg, patch_model_transport):
     with pytest.raises(GuardViolation, match="max_gpu_count"):
         prov.up(cfg.profile("l40s"), UpOptions(allow_concurrent=True))
     assert len(fake.created) == 1
+
+
+def test_guard_says_when_the_other_pod_is_still_starting(cfg, patch_model_transport):
+    fake = FakeRunpod()
+    t = ready_transport()
+    patch_model_transport(t)
+    prov, _ = provider(cfg, fake, t)
+    prov.up(cfg.profile("a40"))
+    session = load_session("a40")
+    session.ready_at = None  # as seen from a second `qwenbench up` while the first is still waiting
+    save_session(session)
+    with pytest.raises(GuardViolation, match="a40 is still starting"):
+        prov.up_first_available([cfg.profile("a6000"), cfg.profile("a40")])
 
 
 def test_wrong_model_identity_never_becomes_ready_and_is_cleaned_up(cfg, patch_model_transport):

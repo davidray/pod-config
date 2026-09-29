@@ -52,10 +52,12 @@ task.md [--context-file ctx.md] [--criteria ...]... [--validate CMD]...
 }
 ```
 
+`warnings` lists things the reviewer must check even on success, for example assertions removed net from a test file. Changes under `.hero/` are not part of the result: Hero rewrites those files from its own hooks while a dispatch runs.
+
 `status` is decided by the harness, not the model:
 
 - **completed:** the agent called `finish(completed)` **and** every validation command passed.
-- **failed:** covers `validation_failed`, `agent_gave_up`, `iteration_limit`, `timeout`, `token_budget` and `no_progress`.
+- **failed:** covers `validation_failed`, `agent_gave_up`, `iteration_limit`, `timeout`, `token_budget`, `no_progress` and `tests_disabled`. The last one means validation passed, but the diff comments out tests or adds skip/only markers in test files (`agent/testguard.py`).
 - **blocked:** the agent reported it needs information (`agent_blocked`).
 - **error:** the work could not be attempted or the endpoint failed (`endpoint_unavailable`, `llm_error`, `policy`). `failure.retryable` says whether retrying can help.
 

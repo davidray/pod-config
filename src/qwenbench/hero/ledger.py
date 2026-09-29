@@ -3,7 +3,7 @@
     config.json      binding written by `qwenbench hero configure` (enforce flag, bench home)
     decisions.jsonl  every hook decision (allow/deny, agent, route, reason)
     ledger.jsonl     every dispatch (request, route, served model, pod, files + blobs)
-    baseline.json    working-tree snapshot taken at Claude session start
+    baselines/       working-tree snapshot per Claude session, taken at its first hook event
     dispatches/<id>/ transcript, tool log, diff, requests for each dispatch
 
 This is how you prove after the fact which model performed each role.

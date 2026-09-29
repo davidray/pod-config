@@ -115,7 +115,8 @@ def run_dispatch(cfg: Config, req: DispatchRequest, project: Path, provider_fact
              for c in result.files_changed]
     log_dispatch(project, event="dispatch-end", dispatch_id=dispatch_id, role=req.role, task_key=key,
                  attempt=prior + 1, status=result.status, model=result.model, files=files,
-                 failure=result.failure.model_dump() if result.failure else None, metrics=result.metrics)
+                 failure=result.failure.model_dump() if result.failure else None, warnings=result.warnings,
+                 metrics=result.metrics)
     code = EXIT[result.status]
     if result.status != "completed" and prior + 1 >= budget:
         result.failure = result.failure or Failure(kind="internal", message="unknown")

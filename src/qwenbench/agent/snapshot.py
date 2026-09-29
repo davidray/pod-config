@@ -52,19 +52,23 @@ def snapshot(repo: Path) -> str:
         return _git(repo, "write-tree", env=env).strip()
 
 
-def diff(repo: Path, base: str, head: str) -> str:
-    return _git(repo, "diff", "--binary", "--no-color", base, head)
+def _pathspec(exclude: tuple[str, ...]) -> list[str]:
+    return ["--", ".", *(f":(exclude){p}" for p in exclude)] if exclude else []
 
 
-def changes(repo: Path, base: str, head: str) -> list[FileChange]:
+def diff(repo: Path, base: str, head: str, exclude: tuple[str, ...] = ()) -> str:
+    return _git(repo, "diff", "--binary", "--no-color", base, head, *_pathspec(exclude))
+
+
+def changes(repo: Path, base: str, head: str, exclude: tuple[str, ...] = ()) -> list[FileChange]:
     status = {}
-    for line in _git(repo, "diff", "--name-status", "-M", base, head).splitlines():
+    for line in _git(repo, "diff", "--name-status", "-M", base, head, *_pathspec(exclude)).splitlines():
         parts = line.split("\t")
         code = parts[0][0]
         path = parts[-1]
         status[path] = {"A": "added", "M": "modified", "D": "deleted", "R": "renamed"}.get(code, "modified")
     out = []
-    for line in _git(repo, "diff", "--numstat", "-M", base, head).splitlines():
+    for line in _git(repo, "diff", "--numstat", "-M", base, head, *_pathspec(exclude)).splitlines():
         added, deleted, path = line.split("\t", 2)
         if " => " in path or "{" in path:
             path = next((p for p in status if path.endswith(p.split("/")[-1])), path)

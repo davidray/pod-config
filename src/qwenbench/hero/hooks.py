@@ -24,6 +24,7 @@ Every decision is appended to .qwen-routing/decisions.jsonl.
 
 from __future__ import annotations
 
+import contextlib
 import fnmatch
 import json
 import os
@@ -195,26 +196,37 @@ def decide_pre_tool_use(event: dict[str, Any], policy: RolePolicyFile, project: 
     return Decision(True, "tool not governed by routing policy", "ungoverned", caller)
 
 
+def routing_rules(qwen_model: str | None, qwen_roles: list[str], frontier_roles: list[str]) -> str:
+    """The instructions Claude gets (CLAUDE.local.md and SessionStart). Shaped by the first live trial."""
+    return (
+        f"Implementation roles run on **Qwen ({qwen_model})** through `qwenbench dispatch`. Never spawn them as "
+        "subagents (the hooks deny it; go straight to dispatch) and never edit implementation files yourself:\n"
+        f"{', '.join(qwen_roles)}\n\n"
+        f"Claude performs design, planning and review roles: {', '.join(frontier_roles)}. Claude may write specs and "
+        "docs (.hero/**, docs/**, *.md).\n\n"
+        "Delegating:\n"
+        "1. Split the work into small dispatches, one coherent unit each (for example: core logic, then UI), "
+        "about 3 files or one package at most. Dispatch the next unit after reviewing the previous one.\n"
+        "2. The task file states behavior, interfaces (signatures, types), files to touch, constraints, acceptance "
+        "criteria and the validation commands. Do not write the implementation code in it: that is the worker's job.\n"
+        "3. Run `qwenbench dispatch --project \"$CLAUDE_PROJECT_DIR\" --role <role> --task-file <file> "
+        "--validate '<cmd>' [--spec <slug>]` and read the JSON DispatchResult.\n"
+        "4. Review the diff. Reject the result if `failure.kind` is `tests_disabled` or `warnings` is non-empty "
+        "until you have checked each warning; tests that are commented out, skipped or weakened are not a pass.\n"
+        "5. If a unit fails beyond the retry policy, stop and report it. Do not implement it yourself or hand it "
+        "to a Claude subagent: only the human can authorize that with `qwenbench override grant` in their own "
+        "terminal.\n"
+    )
+
+
 def session_context(policy: RolePolicyFile, project: Path) -> str:
     from qwenbench.hero.policy import route_table
 
     models = effective_models(project)
     table = route_table(policy, models)
-    qwen = sorted(r.agent for r in table if r.is_qwen)
-    frontier = sorted(r.agent for r in table if r.is_frontier)
-    execution = models.model_for("execution")
-    return (
-        "## Model routing policy (enforced by qwenbench hooks)\n"
-        f"Implementation roles run on Qwen ({execution}) via `qwenbench dispatch`, never as Claude subagents and "
-        "never by Claude editing implementation files directly:\n"
-        f"  {', '.join(qwen)}\n"
-        f"Claude performs: {', '.join(frontier)}.\n"
-        "Claude may write specs and docs (.hero/**, docs/**, *.md). For implementation, write a precise task "
-        "file (spec excerpt, conventions, files, acceptance criteria, validation command) and run "
-        "`qwenbench dispatch --project <root> --role <role> --task-file <file> --validate '<cmd>'`. Review the JSON "
-        "result and the diff. If dispatch fails beyond the retry policy, stop and report it; do not fall back "
-        "to implementing it yourself. Only the human can grant an override."
-    )
+    return "## Model routing policy (enforced by qwenbench hooks)\n\n" + routing_rules(
+        models.model_for("execution"), sorted(r.agent for r in table if r.is_qwen),
+        sorted(r.agent for r in table if r.is_frontier))
 
 
 def _project_root(event: dict[str, Any]) -> Path:
@@ -245,6 +257,11 @@ def main(kind: str, stdin: str | None = None) -> int:
         return 0
 
     if kind == "pre-tool-use":
+        from qwenbench.hero.audit import record_baseline
+
+        # A session that started in another checkout never fires SessionStart here.
+        with contextlib.suppress(Exception):
+            record_baseline(project, event.get("session_id"))
         d = decide_pre_tool_use(event, policy, project)
         tin = event.get("tool_input") or {}
         log_decision(project, event="pre-tool-use", tool=event.get("tool_name"), allow=d.allow, rule=d.rule,
@@ -260,15 +277,10 @@ def main(kind: str, stdin: str | None = None) -> int:
         return 2
 
     if kind == "session-start":
-        from qwenbench.agent import snapshot
+        from qwenbench.hero.audit import record_baseline
 
-        try:
-            tree = snapshot.snapshot(project)
-            (project / ".qwen-routing").mkdir(exist_ok=True)
-            (project / ".qwen-routing" / "baseline.json").write_text(json.dumps({
-                "tree": tree, "session_id": event.get("session_id")}))
-        except Exception:
-            pass
+        with contextlib.suppress(Exception):
+            record_baseline(project, event.get("session_id"))
         log_decision(project, event="session-start", session_id=event.get("session_id"))
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",
                                                  "additionalContext": session_context(policy, project)}}))
@@ -278,7 +290,7 @@ def main(kind: str, stdin: str | None = None) -> int:
         from qwenbench.hero.audit import unattributed_changes
 
         try:
-            flagged = unattributed_changes(project, policy)
+            flagged = unattributed_changes(project, policy, event.get("session_id"))
         except Exception:
             flagged = []
         if flagged:

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import httpx
 import typer
+from rich import box
 from rich.table import Table
 
 from qwenbench.cli.common import cfg, console, err, handle_errors, provider
@@ -107,9 +108,11 @@ def status(profile: str = typer.Argument(None)) -> None:
     c = cfg()
     prov = provider(c)
     names = [profile] if profile else c.profile_names()
-    t = Table(title="qwenbench endpoints")
-    for col in ("profile", "state", "pod", "$/hr", "uptime", "spend (est)", "phase", "idle", "guard", "endpoint"):
-        t.add_column(col)
+    # Compact, and the long endpoint URL goes below the table, so it fits an 80-column terminal.
+    t = Table(title="qwenbench endpoints", box=box.SIMPLE_HEAD, pad_edge=False, collapse_padding=True, show_edge=False)
+    for col in ("profile", "state", "pod", "$/hr", "uptime", "spend", "phase", "idle", "guard"):
+        t.add_column(col, no_wrap=True)
+    endpoints = []
     live_total = 0.0
     for n in names:
         st = prov.status(c.profile(n))
@@ -121,8 +124,12 @@ def status(profile: str = typer.Argument(None)) -> None:
                   f"{st.cost_per_hr:.2f}" if st.cost_per_hr else "-", format_duration(st.uptime_s) if st.uptime_s else "-",
                   f"${st.estimated_spend_usd:.2f}" if st.estimated_spend_usd else "-", sup.get("phase", "-"),
                   format_duration(sup.get("idle_for_s")) if sup.get("idle_for_s") is not None else "-",
-                  f"pid {g}" if g else ("[yellow]none[/]" if st.live else "-"), (st.detail or {}).get("endpoint", "-"))
+                  f"pid {g}" if g else ("[yellow]none[/]" if st.live else "-"))
+        if (st.detail or {}).get("endpoint"):
+            endpoints.append(f"{n}: {st.detail['endpoint']}")
     console.print(t)
+    for line in endpoints:
+        console.print(line, soft_wrap=True)
     strays = [p for p in prov.our_pods() if p.is_live and p.name.removeprefix(c.runpod.api.pod_name_prefix) not in names]
     for p in strays:
         err.print(f"[yellow]WARNING: live pod {p.name} ({p.id}) not matching any profile; `qwenbench down --all`[/]")

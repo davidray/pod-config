@@ -27,3 +27,12 @@ MCP wrapper can be added on top of the same function if desired.
 - The boundary holds for Claude Code sessions in configured projects. Other harnesses (Cursor, Codex) are not covered.
 - Shell-write detection is best-effort by nature, which is why audit exists.
 - Each governed tool call pays about 110 ms of hook latency (measured; mostly Python start-up).
+
+## Finding (2026-09-24): enforcement is per checkout, not per repository
+In the first live trial, the Claude desktop app started the session in its own fresh worktree of the target repo. Claude Code loads project hooks from the session's project root, and `qwenbench hero configure` had written them (untracked) into a different checkout. The session therefore ran with **no hooks at all**. Claude complied with the routing only because it read the instructions. The first audit wrongly reported full Qwen attribution. It now reports sessions that never ran the hooks.
+
+Open decision. Options:
+1. A user-level hook in `~/.claude/settings.json` that runs a fast shell check for a binding in the repository's git common dir, shared by all worktrees. It enforces every checkout of a configured repo on this machine, but touches global settings.
+2. Hooks committed in the repo's `.claude/settings.json`. Hero preserves non-Hero hooks there. This affects every collaborator, and the hook command path is machine-specific.
+3. Keep per-checkout hooks and require starting sessions in the configured checkout. That is simple, but easy to get wrong silently, which is exactly what happened.
+4. Make it native in Hero: an external-runner role type in Hero's own agent and command rendering. See the Hero design work.

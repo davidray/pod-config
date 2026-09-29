@@ -151,6 +151,13 @@ class RunpodPodsProvider:
         gpus = sum(max(p.gpu_count, 1) for p in others) + profile.gpu_count
         limit = self.cfg.runpod.guards.max_gpu_count
         if others and not (opts.allow_concurrent or self.cfg.runpod.guards.allow_concurrent_profiles):
+            prefix = self.cfg.runpod.api.pod_name_prefix
+            starting = [p for p in others if (s := load_session(p.name.removeprefix(prefix)))
+                        and s.pod_id == p.id and not s.ready_at]
+            if starting:
+                name = starting[0].name.removeprefix(prefix)
+                raise GuardViolation(f"{name} is still starting (pod {starting[0].id}); wait for it, or watch "
+                                     f"`qwenbench status {name}`. It will be used once ready.")
             names = ", ".join(f"{p.name} ({p.status}, ${p.cost_per_hr:.2f}/hr)" for p in others)
             raise GuardViolation(f"other qwenbench pods are live: {names}. Run `qwenbench down --all`, "
                                  "or pass --allow-concurrent (still subject to guards.max_gpu_count).")

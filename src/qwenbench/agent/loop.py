@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from qwenbench.agent import snapshot
+from qwenbench.agent import snapshot, testguard
 from qwenbench.agent.protocol import DispatchRequest, DispatchResult, Failure, ValidationResult
 from qwenbench.agent.sandbox import Sandbox
 from qwenbench.agent.tools import TOOL_SCHEMAS, Toolbox
@@ -202,6 +202,11 @@ def validate(sandbox: Sandbox, commands: list[str], timeout_s: float = 900) -> l
     return results
 
 
+# Hero rewrites its own workspace files (.hero/NEXT.md, SNAPSHOT.md, ...) from
+# its hooks while a dispatch runs; those changes are never the worker's.
+NOT_AGENT_WORK = (".hero",)
+
+
 def execute(
     req: DispatchRequest,
     client: ChatClient,
@@ -222,8 +227,9 @@ def execute(
     agent_s = time.monotonic() - wall0
     validation = validate(sandbox, req.validation_commands, timeout_s=req.limits.command_timeout_s)
     head = snapshot.snapshot(workspace)
-    changes = snapshot.changes(workspace, base, head)
-    patch = snapshot.diff(workspace, base, head)
+    changes = snapshot.changes(workspace, base, head, exclude=NOT_AGENT_WORK)
+    patch = snapshot.diff(workspace, base, head, exclude=NOT_AGENT_WORK)
+    guard = testguard.scan(patch)
     (out_dir / "diff.patch").write_text(patch)
     (out_dir / "transcript.json").write_text(json.dumps(redact(messages), indent=1))
 
@@ -240,6 +246,9 @@ def execute(
             failure = Failure(kind="validation_failed", message=f"agent reported completion but validation failed: {failed}")
     elif failure is None:
         failure = Failure(kind="internal", message="loop ended without finish or failure")
+    if failure is None and guard.disabled:
+        failure = Failure(kind="tests_disabled", message="validation passed only with tests disabled: "
+                          + "; ".join(guard.disabled))
 
     status = "completed" if failure is None else ("blocked" if failure.kind == "agent_blocked" else "failed")
     if failure and failure.kind in ("endpoint_unavailable", "llm_error") and not changes:
@@ -265,6 +274,7 @@ def execute(
         metrics=metrics,
         model={**model_identity, "served_models_observed": served},
         failure=failure,
+        warnings=guard.disabled + guard.warnings,
         base_tree=base,
         result_tree=head,
         artifacts={"diff": str(out_dir / "diff.patch"), "transcript": str(out_dir / "transcript.json"),

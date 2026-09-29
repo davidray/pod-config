@@ -1,6 +1,6 @@
-# Project Snapshot — pod-config
+# Project Snapshot — qwen-trial-fixes
 
-_Last refreshed: 2026-09-23T14:32:36Z · projected from 1 source nodes_
+_Last refreshed: 2026-09-28T18:36:48Z · projected from 1 source nodes_
 
 ## Surfaces
 

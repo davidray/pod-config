@@ -57,7 +57,7 @@ class ValidationResult(BaseModel):
 class Failure(BaseModel):
     kind: Literal[
         "endpoint_unavailable", "llm_error", "validation_failed", "agent_gave_up", "agent_blocked",
-        "iteration_limit", "timeout", "token_budget", "no_progress", "policy", "internal",
+        "iteration_limit", "timeout", "token_budget", "no_progress", "policy", "internal", "tests_disabled",
     ]
     message: str
     retryable: bool = False
@@ -77,6 +77,7 @@ class DispatchResult(BaseModel):
     metrics: dict[str, Any] = Field(default_factory=dict)
     model: dict[str, Any] = Field(default_factory=dict, description="Proof of who did the work")
     failure: Failure | None = None
+    warnings: list[str] = Field(default_factory=list, description="Things the reviewer must check, e.g. removed assertions")
     base_tree: str | None = None
     result_tree: str | None = None
     artifacts: dict[str, str] = Field(default_factory=dict, description="transcript, diff, requests paths")

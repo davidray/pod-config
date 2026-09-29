@@ -29,7 +29,7 @@ from typing import Any
 
 from qwenbench.config import Config
 from qwenbench.hero import heroconfig
-from qwenbench.hero.hooks import decide_pre_tool_use
+from qwenbench.hero.hooks import decide_pre_tool_use, routing_rules
 from qwenbench.hero.ledger import DIR as ROUTING_DIR
 from qwenbench.hero.policy import resolve, route_table
 from qwenbench.paths import repo_root
@@ -241,19 +241,8 @@ def claude_local_block_for(cfg: Config, models: heroconfig.HeroModels) -> str:
     table = route_table(cfg.policy, models)
     qwen = sorted(r.agent for r in table if r.is_qwen)
     frontier = sorted(r.agent for r in table if r.is_frontier)
-    body = (
-        "## Model routing policy (enforced by qwenbench hooks)\n\n"
-        f"Implementation roles run on **Qwen ({models.model_for('execution')})** through `qwenbench dispatch`; "
-        "they are never spawned as Claude subagents, and Claude never edits implementation files itself:\n\n"
-        f"{', '.join(qwen)}\n\n"
-        f"Claude performs design, planning and review roles: {', '.join(frontier)}.\n\n"
-        "To delegate: write a task file (spec excerpt, conventions, files to touch, acceptance criteria), then\n"
-        "`qwenbench dispatch --project \"$CLAUDE_PROJECT_DIR\" --role <role> --task-file <file> --validate '<test cmd>' "
-        "[--spec <slug>]`.\n"
-        "Read the JSON DispatchResult and review the diff. If dispatch fails beyond the retry policy, stop and "
-        "report the failure. Do not implement the work yourself and do not switch it to a Claude subagent: only "
-        "the human can authorize that with `qwenbench override grant` in their own terminal.\n"
-    )
+    body = "## Model routing policy (enforced by qwenbench hooks)\n\n" + routing_rules(
+        models.model_for("execution"), qwen, frontier)
     return (f"{BLOCK_START}\n<!-- Managed by `qwenbench hero configure` (qwenbench). "
             f"Edit config/role-policy.yaml in the qwenbench repo instead. -->\n{body}{BLOCK_END}\n")
 
