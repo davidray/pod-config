@@ -43,7 +43,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 ENV = os.environ
 POD_ID = ENV.get("RUNPOD_POD_ID", "local")
 API_KEY = ENV.get("VLLM_API_KEY", "")  # shared with vLLM; guards /status too
-RUNPOD_KEY = ENV.get("RUNPOD_API_KEY", "")  # pod-scoped key injected by Runpod
+# A dedicated restricted key (QWENBENCH_SELF_STOP_KEY) is preferred: Runpod's
+# injected pod-scoped RUNPOD_API_KEY returned 403 on its own pod (2026-09-23).
+RUNPOD_KEY = ENV.get("QWENBENCH_SELF_STOP_KEY") or ENV.get("RUNPOD_API_KEY", "")
+KEY_SOURCE = "self-stop-key" if ENV.get("QWENBENCH_SELF_STOP_KEY") else "pod-scoped-key"
 PORT = int(ENV.get("QWENBENCH_VLLM_PORT", "8000"))
 WD_PORT = int(ENV.get("QWENBENCH_WATCHDOG_PORT", "8001"))
 STATE_ROOT = ENV.get("QWENBENCH_STATE_ROOT", "/workspace/qwenbench")
@@ -99,6 +102,7 @@ class State:
         self.cost_per_hr = LIST_COST_PER_HR
         self.cost_source = "list-price"
         self.api_auth_ok: bool | None = None
+        self.api_probe_status: int | None = None
         self.shutdown: dict | None = None
         self.vllm_exit: int | None = None
         self.log_tail: deque[str] = deque(maxlen=2000)
@@ -134,6 +138,8 @@ class State:
                 "cost_source": self.cost_source,
                 "estimated_spend_usd": round(self.cost_per_hr * uptime / 3600, 4),
                 "runpod_api_auth_ok": self.api_auth_ok,
+                "runpod_api_key_source": KEY_SOURCE,
+                "runpod_api_probe_status": self.api_probe_status,
                 "vllm_exit_code": self.vllm_exit,
                 "shutdown": self.shutdown,
                 "history": read_history(),
@@ -175,16 +181,26 @@ def runpod_call(method: str, url: str, body: dict | None = None) -> tuple[int, d
 
 
 def probe_api() -> None:
-    """Check the pod-scoped key works and learn the authoritative $/hr."""
+    """Read our own pod record: learns the billed $/hr and whether the key can read.
+
+    A failed read does not prove the key cannot stop the pod (observed
+    2026-09-23: reads failed, yet self-stop worked), so this is only a hint.
+    """
     if DRY_RUN or not RUNPOD_KEY:
         STATE.api_auth_ok = False if not RUNPOD_KEY else None
         return
-    status, body = runpod_call("GET", f"https://api.runpod.io/v2/pods/{POD_ID}")
+    status, body = 0, None
+    for _ in range(6):  # networking can lag container start
+        status, body = runpod_call("GET", f"https://api.runpod.io/v2/pods/{POD_ID}")
+        if status:
+            break
+        time.sleep(10)
+    STATE.api_probe_status = status
     STATE.api_auth_ok = status == 200
     if status == 200 and body and body.get("cost"):
         STATE.cost_per_hr = float(body["cost"])
         STATE.cost_source = "runpod-pod-cost"
-    log(f"runpod api probe: status={status} cost_per_hr={STATE.cost_per_hr} ({STATE.cost_source})")
+    log(f"runpod api probe ({KEY_SOURCE}): status={status} cost_per_hr={STATE.cost_per_hr} ({STATE.cost_source})")
 
 
 def terminate_self(reason: str, detail: str) -> None:
@@ -375,7 +391,7 @@ def main() -> None:
         f"max_session={MAX_SESSION_S} max_spend={MAX_SPEND_USD}")
     server = ThreadingHTTPServer(("0.0.0.0", WD_PORT), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    probe_api()
+    threading.Thread(target=probe_api, daemon=True).start()
     proc = start_vllm() if ENV.get("QWENBENCH_VLLM_ARGV") else None
 
     def forward(sig, _frame):

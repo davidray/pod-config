@@ -12,12 +12,15 @@ model serves a kind of work**. `config/role-policy.yaml` adds only the missing
 piece: **which agent does which kind of work**.
 
 ```
-engineer --role-policy.yaml--> execution --hero.local.json--> "qwen:a6000" --providers--> Qwen on profile a6000
-brownfield-architect --------> design    --------------------> "claude-opus-5-5" -------> Claude (native)
+engineer --role-policy.yaml--> execution --hero.local.json--> "qwen" --providers--> Qwen on whichever profile is ready
+brownfield-architect --------> design    --------------------> "claude-opus-5-5" -> Claude (native)
 ```
 
-Change the Qwen GPU for a project by changing one value
-(`qwenbench hero configure DIR --execution-profile l40s`). Reclassify an agent in
+By default the execution role maps to plain `qwen`: dispatch uses whichever
+profile is ready, checked in `profile_preference` order (`config/runpod.yaml`),
+and `qwenbench up` with no profile starts the first one with capacity. Pin a
+project to one GPU with `qwenbench hero configure DIR --execution-profile l40s`
+(model id `qwen:l40s`). Reclassify an agent in
 `role-policy.yaml`. Agents that are not classified, such as a new agent added
 by a future `hero upgrade`, are **denied** until you classify them;
 `qwenbench hero inspect` lists them.
@@ -109,9 +112,9 @@ requires an interactive TTY.
 ## Setup summary
 
 ```bash
-qwenbench up a6000
+qwenbench up
 qwenbench hero inspect   ~/code/myproject
-qwenbench hero configure ~/code/myproject --execution-profile a6000
+qwenbench hero configure ~/code/myproject
 qwenbench hero verify    ~/code/myproject
 # ...use Claude Code with Hero as usual...
 qwenbench hero audit     ~/code/myproject

@@ -30,7 +30,7 @@ OpenAI-compatible endpoint.
 See `docs/architecture.md` and ADRs 0001-0011. In summary:
 
 - **Compute.** `ComputeProvider` with a Runpod Pods implementation over REST v2 (v1 retires 2026-11-15). Pods and volumes are discovered by name. Each profile (`a6000`, `l40s`) gets a network-volume model cache, since no data center hosts both GPUs with volumes.
-- **Serving.** A pinned `vllm/vllm-openai:v0.30.0-cu129` image, used unmodified. A stdlib supervisor ships as a deterministic env-var bootstrap. It reports boot phases and runs the idle, startup, session and spend watchdog, which terminates its own pod. A local guard is the backstop.
+- **Serving.** A pinned `vllm/vllm-openai:v0.30.0` (CUDA 13) image, used unmodified. A stdlib supervisor ships as a deterministic env-var bootstrap. It reports boot phases and runs the idle, startup, session and spend watchdog, which terminates its own pod. A local guard is the backstop.
 - **Readiness.** An explicit FSM. READY requires a real authenticated completion from the expected served model.
 - **Metrics.** A streaming instrumented OpenAI client records TTFT, tokens, cached tokens, retries and failures to JSONL.
 - **Agent.** A minimal tool-calling agent loop in an OS sandbox (seatbelt or bwrap), plus the versioned `qwenbench.dispatch/v1` protocol.
@@ -56,7 +56,7 @@ Phases, each runnable and tested:
 
 ## Acceptance Criteria
 
-- [ ] `qwenbench up a6000` / `qwenbench up l40s` reach verified READY on real Runpod and print phase timings (needs credentials; not yet run)
+- [x] `qwenbench up a6000` / `qwenbench up l40s` reach verified READY on real Runpod and print phase timings (A6000 445 s, L40S 156 s; full daveeval run on both, see docs/benchmarking.md)
 - [x] `qwenbench down --all` is idempotent and touches only `qwenbench-*` pods (tested against a fake v2 API)
 - [x] Idle, startup, session and spend shutdowns terminate the pod and record the reason (supervisor tested as a real process; guard decisions unit-tested)
 - [x] Same model revision, runtime, generation, agent, prompts, starting commits and validation on both GPUs; `compare` flags any difference

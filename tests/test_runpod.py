@@ -7,7 +7,13 @@ from qwenbench.readiness import Phase
 from qwenbench.runpod import podspec
 from qwenbench.runpod.client import RunpodClient, RunpodError
 from qwenbench.runpod.models import Pod
-from qwenbench.runpod.provider import GuardViolation, ProvisionError, RunpodPodsProvider, UpOptions
+from qwenbench.runpod.provider import (
+    GuardViolation,
+    NoCapacity,
+    ProvisionError,
+    RunpodPodsProvider,
+    UpOptions,
+)
 from qwenbench.state import load_session, read_events
 from tests.conftest import FAKE_HF_TOKEN
 from tests.fakes import FakeRunpod, pod_json
@@ -94,10 +100,10 @@ def test_billing_and_volumes():
 
 
 def test_create_body_shape(cfg):
-    p = cfg.profile("a6000")
+    p = with_volume(cfg.profile("a6000"))
     env = podspec.pod_env(p, endpoint_api_key="k" * 30, list_cost_per_hr=0.53, hf_token=FAKE_HF_TOKEN)
     body = podspec.create_body(p, env=env, data_center_ids=["EU-RO-1"], network_volume_id="vol_1")
-    assert body["gpu"] == {"id": "NVIDIA RTX A6000", "count": 1, "minCudaVersion": "12.9"}
+    assert body["gpu"] == {"id": "NVIDIA RTX A6000", "count": 1, "minCudaVersion": "13.0"}
     assert body["mounts"] == {"network": [{"volumeId": "vol_1", "path": "/workspace"}]}
     assert body["ports"] == ["8000/http", "8001/http"] and body["cloud"] == "SECURE"
     assert body["entrypoint"] == ["/bin/bash", "-c"]
@@ -118,10 +124,14 @@ def test_ephemeral_storage_sizes_disk(cfg):
     p = cfg.profile("l40s")
     p = p.model_copy(update={"storage": p.storage.model_copy(update={"mode": "ephemeral"})})
     body = podspec.create_body(p, env={}, data_center_ids=[], network_volume_id=None)
-    assert "mounts" not in body and body["disk"] == p.container_disk_gb + p.storage.size_gb
+    assert "mounts" not in body and body["disk"] == p.container_disk_gb + 38  # 31.2 GB weights x 1.2
 
 
 # ------------------------------------------------------------------ provider lifecycle
+
+
+def with_volume(p):
+    return p.model_copy(update={"storage": p.storage.model_copy(update={"mode": "network-volume"})})
 
 
 def ready_transport(model="qwen3-coder-30b-a3b-fp8", phase="server_up"):
@@ -182,7 +192,7 @@ def test_up_creates_volume_pod_and_waits_for_real_inference(cfg, patch_model_tra
     patch_model_transport(t)
     prov, clock = provider(cfg, fake, t)
     msgs = []
-    ep = prov.up(cfg.profile("a6000"), UpOptions(idle_timeout_s=3600.0), progress=msgs.append)
+    ep = prov.up(with_volume(cfg.profile("a6000")), UpOptions(idle_timeout_s=3600.0), progress=msgs.append)
     assert ep.base_url == "https://pod_1-8000.proxy.runpod.net/v1" and ep.model == "qwen3-coder-30b-a3b-fp8"
     # volume discovered/created by name, in the best-availability data center
     vol = next(iter(fake.volumes.values()))
@@ -256,8 +266,51 @@ def test_capacity_error_with_volume_explains(cfg, patch_model_transport):
     patch_model_transport(t)
     prov, _ = provider(cfg, fake, t)
     with pytest.raises(ProvisionError, match="ephemeral"):
-        prov.up(cfg.profile("a6000"))
+        prov.up(with_volume(cfg.profile("a6000")))
     assert not fake.pods
+
+
+def test_up_first_available_falls_through_to_next_profile(cfg, patch_model_transport):
+    fake = FakeRunpod()
+    fake.no_stock_gpus = {"NVIDIA RTX A6000", "NVIDIA A40"}
+    t = ready_transport()
+    patch_model_transport(t)
+    prov, _ = provider(cfg, fake, t)
+    ep = prov.up_first_available([cfg.profile(n) for n in cfg.preferred_profiles()])
+    assert ep.profile == "l40s"
+    assert [b["gpu"]["id"] for b in fake.created] == ["NVIDIA L40S"] and not fake.volumes
+
+
+def test_up_first_available_falls_through_before_creating_a_volume(cfg, patch_model_transport):
+    fake = FakeRunpod()
+    fake.gpu_availability["NVIDIA RTX A6000"] = "NONE"
+    t = ready_transport()
+    patch_model_transport(t)
+    prov, _ = provider(cfg, fake, t)
+    ep = prov.up_first_available([with_volume(cfg.profile("a6000")), with_volume(cfg.profile("l40s"))])
+    assert ep.profile == "l40s"
+    assert [v["name"] for v in fake.volumes.values()] == ["qwenbench-hf-cache-l40s"]
+
+
+def test_up_first_available_single_profile_keeps_capacity_error(cfg, patch_model_transport):
+    fake = FakeRunpod()
+    fake.no_stock_gpus = {"NVIDIA RTX A6000"}
+    t = ready_transport()
+    patch_model_transport(t)
+    prov, _ = provider(cfg, fake, t)
+    with pytest.raises(NoCapacity, match="NVIDIA RTX A6000"):
+        prov.up_first_available([cfg.profile("a6000")])
+    assert not fake.created
+
+
+def test_up_first_available_reuses_a_ready_profile(cfg, patch_model_transport):
+    fake = FakeRunpod()
+    t = ready_transport()
+    patch_model_transport(t)
+    prov, _ = provider(cfg, fake, t)
+    prov.up(cfg.profile("l40s"))
+    ep = prov.up_first_available([cfg.profile("a6000"), cfg.profile("l40s")])
+    assert ep.profile == "l40s" and len(fake.created) == 1
 
 
 def test_down_is_idempotent_and_down_all(cfg, patch_model_transport):
@@ -304,5 +357,84 @@ def test_no_stock_does_not_create_a_billed_volume(cfg, patch_model_transport):
     patch_model_transport(t)
     prov, _ = provider(cfg, fake, t)
     with pytest.raises(ProvisionError, match="no availability"):
-        prov.up(cfg.profile("a6000"))
+        prov.up(with_volume(cfg.profile("a6000")))
     assert not fake.volumes and not fake.created
+
+
+def test_ephemeral_falls_back_to_any_data_center(cfg, patch_model_transport):
+    fake = FakeRunpod(capacity_errors={"EU-RO-1", "CA-MTL-3"})
+    t = ready_transport()
+    patch_model_transport(t)
+    prov, _ = provider(cfg, fake, t)
+    p = cfg.profile("a6000")
+    p = p.model_copy(update={"storage": p.storage.model_copy(update={"mode": "ephemeral"})})
+    prov.up(p)
+    assert fake.created[0]["dataCenterIds"] == []  # scheduler's choice
+
+
+def test_startup_failure_saves_logs_before_terminating(cfg, patch_model_transport, tmp_path):
+    fake = FakeRunpod()
+    base = ready_transport(phase="vllm_exited")
+
+    def handler(req):
+        if req.url.path == "/logs":
+            return httpx.Response(200, json={"lines": ["ValueError: boom in engine core"]})
+        return base.handle_request(req)
+    t = httpx.MockTransport(handler)
+    patch_model_transport(t)
+    prov, _ = provider(cfg, fake, t)
+    msgs = []
+    with pytest.raises(ProvisionError, match="vLLM process exited"):
+        prov.up(cfg.profile("a6000"), progress=msgs.append)
+    saved = list((tmp_path / "state" / "failures").glob("a6000-*.log"))
+    assert saved and "boom in engine core" in saved[0].read_text()
+    assert "line 2" in saved[0].read_text()  # runpod logs API too
+    assert fake.terminated == ["pod_1"]
+    assert any("boom in engine core" in m for m in msgs)
+
+
+def test_self_stop_key_is_passed_and_never_committed(cfg):
+    p = cfg.profile("a6000")
+    env = podspec.pod_env(p, endpoint_api_key="k" * 30, list_cost_per_hr=0.53, self_stop_key="rpa_SELFSTOP_0123456789")
+    assert env["QWENBENCH_SELF_STOP_KEY"] == "rpa_SELFSTOP_0123456789"
+    committed = podspec.rendered_for_repo(podspec.create_body(p, env=env, data_center_ids=[], network_volume_id="v"))
+    assert "rpa_SELFSTOP" not in json.dumps(committed)
+
+
+def test_up_warns_when_pod_cannot_stop_itself(cfg, patch_model_transport):
+    fake = FakeRunpod()
+    base = ready_transport()
+
+    def handler(req):
+        if req.url.path == "/status":
+            return httpx.Response(200, json={"phase": "server_up", "runpod_api_auth_ok": False,
+                                             "runpod_api_key_source": "pod-scoped-key",
+                                             "runpod_api_probe_status": 403})
+        return base.handle_request(req)
+    t = httpx.MockTransport(handler)
+    patch_model_transport(t)
+    prov, _ = provider(cfg, fake, t)
+    msgs = []
+    prov.up(cfg.profile("a6000"), progress=msgs.append)
+    assert any("cannot stop itself" in m and "HTTP 403" in m for m in msgs)
+    assert any(e["event"] == "self-stop-unverified" for e in read_events())
+
+
+def test_billing_always_sends_start_and_end():
+    seen = {}
+
+    def handler(req):
+        seen.update(req.url.params)
+        return httpx.Response(200, json={"records": [], "metadata": {"totals": {}}})
+    RunpodClient("k" * 20, transport=httpx.MockTransport(handler)).pod_billing("p", "2026-09-23T17:00:00Z")
+    assert seen["startTime"] == "2026-09-23T17:00:00Z" and seen["endTime"]
+
+
+def test_up_removes_stopped_pods_left_by_self_stop(cfg, patch_model_transport):
+    fake = FakeRunpod()
+    fake.pods["old"] = {**pod_json("old", name="qwenbench-a6000", status="EXITED"), "_status_iter": ["EXITED"]}
+    t = ready_transport()
+    patch_model_transport(t)
+    prov, _ = provider(cfg, fake, t)
+    prov.up(cfg.profile("a6000"))
+    assert "old" in fake.terminated and len(fake.created) == 1

@@ -103,3 +103,17 @@ def test_snapshot_does_not_touch_index_or_head(tmp_path):
     assert subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True).stdout == head
     base = subprocess.run(["git", "rev-parse", "HEAD^{tree}"], cwd=repo, capture_output=True, text=True).stdout.strip()
     assert [c.path for c in snapshot.changes(repo, base, t1)] == ["b"]
+
+
+def test_snapshot_sees_same_size_edit_in_same_second_as_index_write(tmp_path):
+    """Regression: a copied index with a fresh mtime hid racily-clean edits."""
+    repo = tmp_path / "racy"
+    repo.mkdir()
+    for i in range(20):  # the race is timing-dependent; repeat to make it reliable
+        (repo / "f.py").write_text("return a - b\n")
+        subprocess.run("git init -q 2>/dev/null; git add -A && git -c user.name=t -c user.email=t@t "
+                       "commit -qm c --allow-empty", shell=True, cwd=repo, check=True)
+        before = snapshot.snapshot(repo)
+        (repo / "f.py").write_text("return a + b\n")  # same size, same second
+        after = snapshot.snapshot(repo)
+        assert before != after, f"iteration {i}: same-size edit missed"

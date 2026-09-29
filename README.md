@@ -13,7 +13,7 @@ hooks rather than by advice, from doing Qwen-assigned implementation work
 itself or silently falling back to Claude.
 
 ```
-qwenbench up a6000      -> pod + persistent model cache + in-pod idle watchdog + local guard
+qwenbench up            -> first GPU with stock (a6000, a40, l40s) + in-pod idle watchdog + local guard
 qwenbench chat a6000    -> OpenAI-compatible endpoint, per-response TTFT / tok/s
 qwenbench bench run     -> real repo tasks in isolated workspaces, sandboxed agent, hidden validation
 qwenbench bench compare -> A6000 vs L40S: successes, first-pass, TTFT, tok/s, GPU time, $ per success
@@ -54,7 +54,7 @@ pod requested -> pod allocated -> container started -> vLLM process started
 | | |
 |---|---|
 | `qwenbench setup` / `qwenbench doctor [--profile P] [--project DIR]` | first-run setup; full health check including endpoint identity and Hero |
-| `qwenbench up P [--idle-timeout 60m\|off] [--max-session 4h] [--max-spend 5] [--storage ephemeral]` | provision and wait for verified readiness |
+| `qwenbench up [P] [--idle-timeout 60m\|off] [--max-session 4h] [--max-spend 5] [--storage network-volume]` | provision and wait for verified readiness |
 | `qwenbench status [P]` | live pods, $/hr, spend so far, idle clock, guard, recent auto-shutdowns |
 | `qwenbench endpoint P [--export] [--show-key]` / `qwenbench logs P [-f]` / `qwenbench chat P` | use the endpoint |
 | `qwenbench down P` / `qwenbench down --all` | terminate (idempotent) |
@@ -96,9 +96,9 @@ See [docs/benchmarking.md](docs/benchmarking.md).
 ## Hero integration
 
 ```bash
-qwenbench up a6000
+qwenbench up                                                          # first of a6000, l40s with capacity
 qwenbench hero inspect ~/code/myproject                               # roles, agents, routes (read-only)
-qwenbench hero configure ~/code/myproject --execution-profile a6000   # shows the diff, asks, applies
+qwenbench hero configure ~/code/myproject                             # shows the diff, asks, applies
 qwenbench hero verify ~/code/myproject                                # proves the wiring, incl. a real hook call
 # work in Claude Code as usual; afterwards:
 qwenbench hero audit ~/code/myproject                                 # which model did what

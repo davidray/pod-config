@@ -13,13 +13,14 @@ from typing import Any
 import httpx
 
 from qwenbench.config import Config, Profile, format_duration
-from qwenbench.providers.base import ComputeStatus, Endpoint
+from qwenbench.paths import state_dir
+from qwenbench.providers.base import ComputeStatus, Endpoint, first_ready
 from qwenbench.providers.openai_compat import OpenAICompatibleModel
 from qwenbench.readiness import LABELS, Observation, Phase, ReadinessMachine
 from qwenbench.runpod import podspec
 from qwenbench.runpod.client import RunpodClient, RunpodError
 from qwenbench.runpod.models import NetworkVolume, Pod
-from qwenbench.secrets import get_secret, require_secret
+from qwenbench.secrets import get_secret, redact, require_secret
 from qwenbench.state import Session, clear_session, load_session, log_event, save_session
 
 Progress = Callable[[str], None]
@@ -31,6 +32,10 @@ class GuardViolation(RuntimeError):
 
 class ProvisionError(RuntimeError):
     pass
+
+
+class NoCapacity(ProvisionError):
+    """The GPU has no stock right now; nothing was created."""
 
 
 @dataclass
@@ -126,8 +131,8 @@ class RunpodPodsProvider:
         # Creating a volume starts a monthly charge; don't do it for a GPU with no stock.
         catalog = self.client.gpu_catalog(profile.gpu_type_id, cloud=profile.cloud)
         if catalog and catalog[0].get("availability") == "NONE":
-            raise ProvisionError(f"{profile.gpu_type_id} ({profile.cloud}) has no availability right now; "
-                                 "not creating its cache volume. Retry later (`qwenbench doctor` shows stock).")
+            raise NoCapacity(f"{profile.gpu_type_id} ({profile.cloud}) has no availability right now; "
+                             "not creating its cache volume. Retry later (`qwenbench doctor` shows stock).")
         dcs = self.available_data_centers(profile)
         if not dcs:
             raise ProvisionError(f"profile {profile.name} has no data_center_ids to place its network volume")
@@ -187,12 +192,20 @@ class RunpodPodsProvider:
             raise GuardViolation(f"pod {pod.id} named {pod.name} is live but has no ready local session; "
                                  f"run `qwenbench down {profile.name}` first")
 
+        # Self-stop leaves the pod EXITED (the watchdog's key may stop but not
+        # delete). Stopped pods bill nothing here, but clear them so they don't pile up.
+        for stale in [p for p in self.pods_for(profile) if p.status == "EXITED"]:
+            progress(f"removing stopped pod {stale.id} left by a previous session")
+            self._terminate(stale.id, profile.name, reason="cleanup: stopped pod from a previous session")
         vol = self.ensure_volume(profile, progress)
         list_rate = self.cfg.pricing.gpu_rate(profile.gpu_type_id, profile.cloud) * profile.gpu_count
         api_key = pysecrets.token_urlsafe(32)
         env = podspec.pod_env(profile, endpoint_api_key=api_key, list_cost_per_hr=list_rate,
-                              hf_token=get_secret("HF_TOKEN"))
-        candidates = [vol.data_center] if vol else self.available_data_centers(profile)
+                              hf_token=get_secret("HF_TOKEN"),
+                              self_stop_key=get_secret("RUNPOD_SELF_STOP_API_KEY"))
+        # A volume pins the data center. Without one, try the preferred data
+        # centers first, then let Runpod place the pod anywhere with stock.
+        candidates = [vol.data_center] if vol else [*self.available_data_centers(profile), None]
 
         machine = ReadinessMachine(profile.startup_timeout_s, clock=self.clock)
         pod = self._create(profile, env, candidates, vol, progress)
@@ -218,6 +231,8 @@ class RunpodPodsProvider:
             self._wait_ready(profile, session, machine, opts, progress)
         except BaseException as exc:  # includes KeyboardInterrupt
             reason = machine.failure or f"{type(exc).__name__}: {exc}"
+            if not isinstance(exc, KeyboardInterrupt):
+                self._capture_failure_logs(session, progress)
             if opts.keep_on_failure:
                 progress(f"startup failed ({reason}); --keep-on-failure set, pod {pod.id} left RUNNING (billing!)")
             else:
@@ -228,6 +243,50 @@ class RunpodPodsProvider:
                 raise
             raise ProvisionError(reason) from exc
         return self._endpoint_from_session(session)
+
+    def up_first_available(self, profiles: list[Profile], opts: UpOptions | None = None,
+                           progress: Progress = print) -> Endpoint:
+        """Bring up the first profile with capacity, in order; reuse one that is already ready."""
+        ready = first_ready(self, self.cfg, [p.name for p in profiles])
+        if ready:
+            progress(f"{ready.profile} already up")
+            return ready
+        for profile, nxt in zip(profiles, [*profiles[1:], None], strict=True):
+            try:
+                return self.up(profile, opts, progress)
+            except NoCapacity:
+                if nxt is None:
+                    raise
+                progress(f"{profile.name}: no capacity; trying {nxt.name}")
+        raise ValueError("no profiles to try")
+
+    def _capture_failure_logs(self, session: Session, progress: Progress, tail: int = 400) -> None:
+        """Save the pod's logs before it is terminated; afterwards they are gone."""
+        lines: list[str] = []
+        try:
+            with httpx.Client(timeout=15, transport=self._transport) as http:
+                r = http.get(f"{session.watchdog_url}/logs", params={"n": tail},
+                             headers={"Authorization": f"Bearer {session.api_key}"})
+                if r.status_code == 200:
+                    lines += ["# supervisor (vLLM output)", *r.json().get("lines", [])]
+        except (httpx.HTTPError, ValueError):
+            pass
+        try:
+            events = self.client.stream_logs(session.pod_id, tail=tail)
+            lines += ["# runpod container/system logs",
+                      *(f"[{e.get('source', '?')}] {e.get('line', '')}" for e in events)]
+        except (RunpodError, httpx.HTTPError):
+            pass
+        if not lines:
+            progress("could not retrieve pod logs before termination")
+            return
+        out = state_dir() / "failures" / f"{session.profile}-{session.pod_id}.log"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(redact("\n".join(lines), extra_secrets=[session.api_key]) + "\n")
+        log_event("startup-logs-captured", profile=session.profile, pod_id=session.pod_id, path=str(out))
+        progress(f"pod logs saved to {out}; last lines:")
+        for line in [x for x in lines if not x.startswith("# ")][-25:]:
+            progress(f"    {line}")
 
     def _create(self, profile: Profile, env: dict[str, str], dcs: list[str],
                 vol: NetworkVolume | None, progress: Progress) -> Pod:
@@ -242,11 +301,12 @@ class RunpodPodsProvider:
                     raise ProvisionError(f"Runpod refused: insufficient balance ({e.detail})") from e
                 if not e.is_capacity:
                     raise
-                errors.append(f"{dc}: {e.detail}")
-                progress(f"no capacity for {profile.gpu_type_id} in {dc}: {e.detail}")
+                where = dc or "any data center"
+                errors.append(f"{where}: {e.detail}")
+                progress(f"no capacity for {profile.gpu_type_id} in {where}: {e.detail}")
         hint = (" The network volume pins the data center; retry later or use --storage ephemeral."
                 if vol else "")
-        raise ProvisionError(f"no capacity for {profile.gpu_type_id}: {'; '.join(errors)}.{hint}")
+        raise NoCapacity(f"no capacity for {profile.gpu_type_id}: {'; '.join(errors)}.{hint}")
 
     def _wait_ready(self, profile: Profile, session: Session, machine: ReadinessMachine,
                     opts: UpOptions, progress: Progress) -> None:
@@ -286,10 +346,26 @@ class RunpodPodsProvider:
                 save_session(session)
                 log_event("pod-ready", profile=profile.name, pod_id=session.pod_id,
                           startup_s=round(session.ready_at - session.requested_at, 1), phases=session.startup)
+                self._warn_if_pod_cannot_stop_itself(session, progress)
                 return
             if phase in (Phase.FAILED, Phase.TIMED_OUT):
                 raise ProvisionError(machine.failure or phase.name)
             self.sleep(opts.poll_s)
+
+    def _warn_if_pod_cannot_stop_itself(self, session: Session, progress: Progress) -> None:
+        sup = self.supervisor_status(session.watchdog_url, session.api_key) or {}
+        if sup.get("runpod_api_auth_ok") is not False:
+            return
+        source, code = sup.get("runpod_api_key_source"), sup.get("runpod_api_probe_status")
+        log_event("self-stop-unverified", profile=session.profile, pod_id=session.pod_id, key_source=source,
+                  probe_status=code)
+        if source == "self-stop-key":
+            progress(f"note: the pod could not read its own record (HTTP {code}); in-pod self-stop is unverified "
+                     "but has worked with a self-stop key before. The local guard remains the backstop.")
+        else:
+            progress(f"WARNING: no RUNPOD_SELF_STOP_API_KEY and Runpod's pod key was refused (HTTP {code}); the pod "
+                     "cannot stop itself. Only the local guard can, and only while this machine is awake. "
+                     "See docs/runpod-setup.md.")
 
     def _terminate(self, pod_id: str, profile: str, reason: str) -> bool:
         gone = not self.client.terminate_pod(pod_id)

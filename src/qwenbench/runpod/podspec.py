@@ -12,6 +12,7 @@ import gzip
 import hashlib
 import io
 import json
+import math
 import tarfile
 from pathlib import Path
 from typing import Any
@@ -85,6 +86,7 @@ def pod_env(
     endpoint_api_key: str,
     list_cost_per_hr: float,
     hf_token: str | None = None,
+    self_stop_key: str | None = None,
 ) -> dict[str, str]:
     archive, digest = bootstrap_archive()
 
@@ -110,6 +112,8 @@ def pod_env(
     }
     if hf_token:
         env["HF_TOKEN"] = hf_token
+    if self_stop_key:
+        env["QWENBENCH_SELF_STOP_KEY"] = self_stop_key
     return env
 
 
@@ -146,12 +150,13 @@ def create_body(
         body["mounts"] = {"network": [{"volumeId": network_volume_id, "path": profile.storage.mount_path}]}
     else:
         # Ephemeral: weights live on the container disk and are re-downloaded
-        # on every pod. Size the disk for weights + headroom.
-        body["disk"] = profile.container_disk_gb + profile.storage.size_gb
+        # on every pod. Size for the weights + 20% headroom, not the volume
+        # size: oversized disk requests narrow the set of hosts that can place us.
+        body["disk"] = profile.container_disk_gb + math.ceil(profile.model.size_gb * 1.2)
     return body
 
 
-SECRET_ENV = ("VLLM_API_KEY", "HF_TOKEN")
+SECRET_ENV = ("VLLM_API_KEY", "HF_TOKEN", "QWENBENCH_SELF_STOP_KEY")
 
 
 def rendered_for_repo(body: dict[str, Any]) -> dict[str, Any]:
