@@ -30,7 +30,6 @@ from qwenbench.hero.ledger import (
 from qwenbench.hero.policy import resolve
 from qwenbench.metrics.llm import ChatClient, JsonlSink
 from qwenbench.paths import state_dir
-from qwenbench.providers.base import first_ready
 from qwenbench.providers.openai_compat import OpenAICompatibleModel
 
 EXIT = {"completed": 0, "failed": 1, "blocked": 1, "error": 4}
@@ -72,21 +71,32 @@ def run_dispatch(cfg: Config, req: DispatchRequest, project: Path, provider_fact
         provider = RunpodPodsProvider(cfg)
     else:
         provider = provider_factory(cfg)
-    endpoint = first_ready(provider, cfg, [pinned] if pinned else cfg.preferred_profiles())
+    # First profile, in preference order, whose endpoint is ready and actually serving. A session
+    # can look ready after its pod stopped, so a dead one must not shadow a live one.
+    endpoint, unhealthy = None, []
+    for name in [pinned] if pinned else cfg.preferred_profiles():
+        candidate = provider.endpoint(cfg.profile(name))
+        if candidate is None:
+            continue
+        health = OpenAICompatibleModel(candidate).health()
+        if health["health_ok"] and health["model_listed"]:
+            endpoint = candidate
+            break
+        unhealthy.append((name, health))
     if endpoint is None:
-        wanted = f"profile {pinned!r}" if pinned else f"any of {', '.join(cfg.preferred_profiles())}"
-        msg = (f"no ready endpoint for {wanted}. A human should run `qwenbench up{' ' + pinned if pinned else ''}` "
-               "(or check `qwenbench status`). Do not fall back to implementing this with Claude.")
-        log_dispatch(project, event="dispatch-unavailable", dispatch_id=dispatch_id, role=req.role, profile=pinned)
+        if unhealthy:
+            name, health = unhealthy[0]
+            msg = (f"endpoint for {name} is not healthy ({health.get('error') or health}); "
+                   f"run `qwenbench status {name}`. Do not fall back to implementing this with Claude.")
+        else:
+            wanted = f"profile {pinned!r}" if pinned else f"any of {', '.join(cfg.preferred_profiles())}"
+            msg = (f"no ready endpoint for {wanted}. A human should run `qwenbench up{' ' + pinned if pinned else ''}` "
+                   "(or check `qwenbench status`). Do not fall back to implementing this with Claude.")
+        log_dispatch(project, event="dispatch-unavailable", dispatch_id=dispatch_id, role=req.role, profile=pinned,
+                     unhealthy=[{"profile": n, "health": h} for n, h in unhealthy])
         return _refusal(req, dispatch_id, "endpoint_unavailable", msg, retryable=True), 4
     profile_name = endpoint.profile
     profile = cfg.profile(profile_name)
-    health = OpenAICompatibleModel(endpoint).health()
-    if not (health["health_ok"] and health["model_listed"]):
-        msg = f"endpoint for {profile_name} is not healthy ({health.get('error') or health}); run `qwenbench status {profile_name}`."
-        log_dispatch(project, event="dispatch-unavailable", dispatch_id=dispatch_id, role=req.role, profile=profile_name,
-                     health=health)
-        return _refusal(req, dispatch_id, "endpoint_unavailable", msg, retryable=True), 4
 
     out_dir = routing_dir(project) / "dispatches" / dispatch_id
     out_dir.mkdir(parents=True, exist_ok=True)

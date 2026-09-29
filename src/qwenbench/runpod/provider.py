@@ -204,6 +204,8 @@ class RunpodPodsProvider:
         for stale in [p for p in self.pods_for(profile) if p.status == "EXITED"]:
             progress(f"removing stopped pod {stale.id} left by a previous session")
             self._terminate(stale.id, profile.name, reason="cleanup: stopped pod from a previous session")
+            if session and session.pod_id == stale.id:
+                clear_session(profile.name)  # else dispatch would still see it as ready if this profile has no stock
         vol = self.ensure_volume(profile, progress)
         list_rate = self.cfg.pricing.gpu_rate(profile.gpu_type_id, profile.cloud) * profile.gpu_count
         api_key = pysecrets.token_urlsafe(32)

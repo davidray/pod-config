@@ -1,6 +1,6 @@
-# Project Snapshot — stale-session-reuse
+# Project Snapshot — trial2-fixes
 
-_Last refreshed: 2026-09-29T09:59:13Z · projected from 1 source nodes_
+_Last refreshed: 2026-09-29T13:12:56Z · projected from 1 source nodes_
 
 ## Surfaces
 

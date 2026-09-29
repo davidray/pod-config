@@ -6,9 +6,9 @@
 
 # Hero Ready Queue
 
-_Generated: 2026-09-29T09:59:13Z · 1 ready spec_
+_Generated: 2026-09-29T13:12:56Z · 1 ready spec_
 
 ## qwen-runpod-bench — Qwen Runpod Bench
 _feature · planning · horizon: now_
 
-_(no `## Kickoff` section — run `/design` or hand-edit /Users/dave/code/pod-config/.claude/worktrees/stale-session-reuse/.hero/planning/features/qwen-runpod-bench/spec.md)_
+_(no `## Kickoff` section — run `/design` or hand-edit /Users/dave/code/pod-config/.claude/worktrees/trial2-fixes/.hero/planning/features/qwen-runpod-bench/spec.md)_

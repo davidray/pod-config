@@ -337,6 +337,19 @@ def test_up_first_available_ignores_a_pod_that_stopped_itself(cfg, patch_model_t
     assert ep.profile == "a6000" and len(fake.created) == 2
 
 
+def test_removing_a_stopped_pod_clears_its_session_even_without_capacity(cfg, patch_model_transport):
+    fake = FakeRunpod()
+    t = ready_transport()
+    patch_model_transport(t)
+    prov, _ = provider(cfg, fake, t)
+    old = prov.up(cfg.profile("a6000"))
+    fake.pods[old.metadata["pod_id"]].update(status="EXITED", _status_iter=["EXITED"])  # idle watchdog stopped it
+    fake.no_stock_gpus = {"NVIDIA RTX A6000"}
+    with pytest.raises(NoCapacity):
+        prov.up(cfg.profile("a6000"))
+    assert load_session("a6000") is None
+
+
 def test_down_is_idempotent_and_down_all(cfg, patch_model_transport):
     fake = FakeRunpod()
     t = ready_transport()
