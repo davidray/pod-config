@@ -326,6 +326,17 @@ def test_up_first_available_reuses_a_ready_profile(cfg, patch_model_transport):
     assert ep.profile == "l40s" and len(fake.created) == 1
 
 
+def test_up_first_available_ignores_a_pod_that_stopped_itself(cfg, patch_model_transport):
+    fake = FakeRunpod()
+    t = ready_transport()
+    patch_model_transport(t)
+    prov, _ = provider(cfg, fake, t)
+    old = prov.up(cfg.profile("a40"))
+    fake.pods[old.metadata["pod_id"]]["_status_iter"] = ["EXITED"]  # idle watchdog stopped it; session file remains
+    ep = prov.up_first_available([cfg.profile("a6000"), cfg.profile("a40")])
+    assert ep.profile == "a6000" and len(fake.created) == 2
+
+
 def test_down_is_idempotent_and_down_all(cfg, patch_model_transport):
     fake = FakeRunpod()
     t = ready_transport()

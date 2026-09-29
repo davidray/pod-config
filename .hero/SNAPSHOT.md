@@ -1,6 +1,6 @@
-# Project Snapshot — qwen-trial-fixes
+# Project Snapshot — stale-session-reuse
 
-_Last refreshed: 2026-09-28T18:36:48Z · projected from 1 source nodes_
+_Last refreshed: 2026-09-29T09:59:13Z · projected from 1 source nodes_
 
 ## Surfaces
 
