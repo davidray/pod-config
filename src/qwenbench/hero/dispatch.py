@@ -19,7 +19,14 @@ from qwenbench.agent.sandbox import Sandbox
 from qwenbench.agent.snapshot import file_blob
 from qwenbench.config import Config
 from qwenbench.hero.heroconfig import effective_models
-from qwenbench.hero.ledger import attempts_for, load_binding, log_dispatch, routing_dir, task_key
+from qwenbench.hero.ledger import (
+    attempts_for,
+    load_binding,
+    log_dispatch,
+    repo_binding_path,
+    routing_dir,
+    task_key,
+)
 from qwenbench.hero.policy import resolve
 from qwenbench.metrics.llm import ChatClient, JsonlSink
 from qwenbench.paths import state_dir
@@ -128,6 +135,9 @@ def run_dispatch(cfg: Config, req: DispatchRequest, project: Path, provider_fact
 def protected_paths(cfg: Config, project: Path) -> list[Path]:
     """Concrete paths for the policy's protected globs (plus the routing dir itself)."""
     paths = {project / ".qwen-routing"}
+    binding = repo_binding_path(project)
+    if binding:  # inside the workspace for a plain checkout (.git/qwenbench)
+        paths.add(binding.parent)
     for g in cfg.policy.enforcement.protected:
         base = g.split("*", 1)[0].rstrip("/")
         if base:

@@ -31,7 +31,7 @@ MCP wrapper can be added on top of the same function if desired.
 ## Finding (2026-09-24): enforcement is per checkout, not per repository
 In the first live trial, the Claude desktop app started the session in its own fresh worktree of the target repo. Claude Code loads project hooks from the session's project root, and `qwenbench hero configure` had written them (untracked) into a different checkout. The session therefore ran with **no hooks at all**. Claude complied with the routing only because it read the instructions. The first audit wrongly reported full Qwen attribution. It now reports sessions that never ran the hooks.
 
-Open decision. Options:
+Decision (2026-09-29, interim, "until we are sure this works well"): **option 1**. `qwenbench hero install-hooks` installs the user-level gate; `hero configure` writes the binding into the git common dir and removes per-checkout hooks. The long-term home is option 4. Options considered:
 1. A user-level hook in `~/.claude/settings.json` that runs a fast shell check for a binding in the repository's git common dir, shared by all worktrees. It enforces every checkout of a configured repo on this machine, but touches global settings.
 2. Hooks committed in the repo's `.claude/settings.json`. Hero preserves non-Hero hooks there. This affects every collaborator, and the hook command path is machine-specific.
 3. Keep per-checkout hooks and require starting sessions in the configured checkout. That is simple, but easy to get wrong silently, which is exactly what happened.

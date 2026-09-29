@@ -1,6 +1,7 @@
 """Per-project routing evidence: `<project>/.qwen-routing/`.
 
-    config.json      binding written by `qwenbench hero configure` (enforce flag, bench home)
+    config.json      legacy per-checkout binding; `qwenbench hero configure` now writes
+                     <git common dir>/qwenbench/config.json instead, shared by every worktree
     decisions.jsonl  every hook decision (allow/deny, agent, route, reason)
     ledger.jsonl     every dispatch (request, route, served model, pod, files + blobs)
     baselines/       working-tree snapshot per Claude session, taken at its first hook event
@@ -13,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -26,14 +28,30 @@ def routing_dir(project: Path) -> Path:
     return Path(project) / DIR
 
 
+def _git(path: Path, *args: str) -> str | None:
+    p = subprocess.run(["git", "-C", str(path), *args], capture_output=True, text=True)
+    return p.stdout.strip() or None if p.returncode == 0 else None
+
+
+def git_toplevel(path: Path) -> Path | None:
+    top = _git(path if path.is_dir() else path.parent, "rev-parse", "--show-toplevel")
+    return Path(top) if top else None
+
+
+def repo_binding_path(project: Path) -> Path | None:
+    """Binding inside the git common dir: every worktree of the repo sees it, and git never tracks it."""
+    common = _git(project, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    return Path(common) / "qwenbench" / "config.json" if common else None
+
+
 def load_binding(project: Path) -> dict[str, Any] | None:
-    p = routing_dir(project) / "config.json"
-    if not p.exists():
-        return None
-    try:
-        return json.loads(p.read_text())
-    except ValueError:
-        return {"enforce": True, "corrupt": True}  # fail closed
+    for p in (repo_binding_path(project), routing_dir(project) / "config.json"):
+        if p and p.exists():
+            try:
+                return json.loads(p.read_text())
+            except ValueError:
+                return {"enforce": True, "corrupt": True}  # fail closed
+    return None
 
 
 def enforcement_active(project: Path) -> bool:

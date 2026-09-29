@@ -52,6 +52,10 @@ def effective_models(project: Path) -> HeroModels:
     base = (read_base(project).get("models") or {})
     local = (read_local(project).get("models") or {})
     roles = dict(base.get("roles") or {})
+    # hero.local.json is per checkout; the repo binding carries the configured roles to fresh worktrees.
+    from qwenbench.hero.ledger import load_binding
+
+    roles.update({k: v for k, v in ((load_binding(project) or {}).get("roles") or {}).items() if v})
     roles.update({k: v for k, v in (local.get("roles") or {}).items() if v})
     default = local.get("default_model") or base.get("default_model") or None
     return HeroModels(roles=roles, default_model=default)

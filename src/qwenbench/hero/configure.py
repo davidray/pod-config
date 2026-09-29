@@ -4,11 +4,13 @@ What configure touches (and why each is safe from `hero upgrade`):
 
   .hero/hero.local.json         models.roles only; Hero's documented, git-ignored
                                 local overlay (other keys preserved)
-  .claude/settings.local.json   our hooks, tagged "added_by": "qwenbench"; Hero
-                                only manages .claude/settings.json
+  <git common dir>/qwenbench/config.json
+                                our binding (roles, sandbox), shared by every worktree
+                                and never tracked; the user-level hook (userhook.py)
+                                enforces wherever it exists
+  .claude/settings.local.json   older per-checkout hooks are removed from it
   CLAUDE.local.md               a fenced qwenbench block; Hero manages CLAUDE.md
-  .qwen-routing/config.json     our binding
-  .git/info/exclude             keeps the above out of git without editing .gitignore
+  .git/info/exclude             keeps local files out of git without editing .gitignore
 
 Nothing under .claude/agents, .claude/commands, .claude/skills, CLAUDE.md or
 .hero/hero.json is modified (those are Hero-owned per .hero/install-state.json).
@@ -28,9 +30,10 @@ from pathlib import Path
 from typing import Any
 
 from qwenbench.config import Config
-from qwenbench.hero import heroconfig
+from qwenbench.hero import heroconfig, userhook
 from qwenbench.hero.hooks import decide_pre_tool_use, routing_rules
 from qwenbench.hero.ledger import DIR as ROUTING_DIR
+from qwenbench.hero.ledger import load_binding, repo_binding_path
 from qwenbench.hero.policy import resolve, route_table
 from qwenbench.paths import repo_root
 
@@ -103,8 +106,10 @@ def inspect(cfg: Config, project: Path) -> dict[str, Any]:
         "unclassified_agents": sorted(set(inv["installed"]) - classified),
         "policy_agents_not_installed": sorted(set(cfg.policy.agents) - set(inv["installed"])),
         "routes": [r.to_dict() for r in table],
-        "routing_configured": (project / ROUTING_DIR / "config.json").exists(),
-        "hooks_installed": _hooks_installed(project),
+        "routing_configured": load_binding(project) is not None,
+        "binding_path": str(binding_path_for(project)),
+        "hooks_installed": userhook.installed(),
+        "legacy_project_hooks": _hooks_installed(project),
     }
 
 
@@ -203,15 +208,20 @@ def plan_configure(cfg: Config, project: Path, execution_profile: str, frontier_
     plan.changes.append(FileChange(local_path, heroconfig.render(local) if local else _read(local_path),
                                    heroconfig.render(new_local)))
 
+    # Hooks now live at user level (userhook.py); drop per-checkout ones so they don't run twice.
     settings_path = project / ".claude" / "settings.local.json"
-    existing = json.loads(_read(settings_path) or "{}")
-    plan.changes.append(FileChange(settings_path, _read(settings_path),
-                                   json.dumps(settings_with_hooks(existing, hook_command()), indent=2) + "\n"))
+    if _hooks_installed(project):
+        existing = json.loads(_read(settings_path))
+        plan.changes.append(FileChange(settings_path, _read(settings_path),
+                                       json.dumps(userhook.settings_without_user_hooks(existing), indent=2) + "\n"))
+    if not userhook.installed():
+        plan.notes.append("user-level hooks are not installed: run `qwenbench hero install-hooks` once, "
+                          "or nothing is enforced")
 
-    binding_path = project / ROUTING_DIR / "config.json"
+    binding_path = binding_path_for(project)
     binding = json.loads(_read(binding_path) or "{}")
     binding.update({"enforce": enforce, "bench_home": str(repo_root()), "execution_profile": execution_profile,
-                    "frontier_model": frontier_model})
+                    "frontier_model": frontier_model, "roles": roles})
     binding.setdefault("sandbox", {"network": False, "real_home": False, "extra_writable": []})
     plan.changes.append(FileChange(binding_path, _read(binding_path), json.dumps(binding, indent=2) + "\n"))
 
@@ -228,6 +238,10 @@ def plan_configure(cfg: Config, project: Path, execution_profile: str, frontier_
         new = old + ("" if not old or old.endswith("\n") else "\n") + "".join(f"{e}\n" for e in missing)
         plan.changes.append(FileChange(exclude, old, new))
     return plan
+
+
+def binding_path_for(project: Path) -> Path:
+    return repo_binding_path(project) or project / ROUTING_DIR / "config.json"
 
 
 def git_exclude_path(project: Path) -> Path | None:
@@ -310,8 +324,11 @@ def verify(cfg: Config, project: Path, endpoint_check=None) -> list[dict[str, An
     add("hero models --check", rc == 0, out.splitlines()[-1] if out else "")
     add("all installed agents classified", not info["unclassified_agents"],
         ", ".join(info["unclassified_agents"]) or "all classified")
-    add("routing binding", info["routing_configured"], str(project / ROUTING_DIR / "config.json"))
-    add("hooks in .claude/settings.local.json", info["hooks_installed"])
+    add("routing binding", info["routing_configured"], info["binding_path"])
+    add("user-level hooks installed", info["hooks_installed"],
+        str(userhook.settings_path()) if info["hooks_installed"] else "run `qwenbench hero install-hooks`")
+    add("no duplicate per-checkout hooks", not info["legacy_project_hooks"], "rerun `qwenbench hero configure`",
+        warn=True)
     cmd = shlex.split(hook_command())[0]
     add("hook command executable", Path(cmd).exists(), cmd)
     for s in simulate(cfg, project):
@@ -321,8 +338,10 @@ def verify(cfg: Config, project: Path, endpoint_check=None) -> list[dict[str, An
         event = json.dumps({"tool_name": "Agent", "tool_input": {"subagent_type": "engineer"}, "cwd": str(project),
                             "session_id": "qwen-hero-verify"})
         try:
-            p = subprocess.run([*shlex.split(hook_command()), "pre-tool-use"], input=event, capture_output=True, text=True,
-                               cwd=project, env={**os.environ, "CLAUDE_PROJECT_DIR": str(project)}, timeout=60)
+            # Through the installed user-level gate, the same way Claude Code calls it.
+            p = subprocess.run([str(userhook.wrapper_path()), "pre-tool-use"], input=event, capture_output=True,
+                               text=True, cwd=project, env={**os.environ, "CLAUDE_PROJECT_DIR": str(project)},
+                               timeout=60)
             add("installed hook denies engineer spawn", p.returncode == 2 and "qwenbench dispatch" in p.stderr,
                 f"exit={p.returncode}")
         except (OSError, subprocess.TimeoutExpired) as e:

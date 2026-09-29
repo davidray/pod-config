@@ -16,6 +16,9 @@ FAKE_HF_TOKEN = "hf_FAKE_TEST_TOKEN_do_not_leak_0123456789"
 def isolated_env(tmp_path, monkeypatch):
     """Never touch the real state dir, results dir, or credentials."""
     monkeypatch.setenv("QWEN_STATE_DIR", str(tmp_path / "state"))
+    from qwenbench.hero import userhook
+
+    monkeypatch.setattr(userhook, "settings_path", lambda: tmp_path / "claude-home" / "settings.json")
     monkeypatch.setenv("QWEN_RESULTS_DIR", str(tmp_path / "results"))
     monkeypatch.setenv("RUNPOD_API_KEY", FAKE_RUNPOD_KEY)
     monkeypatch.setenv("HF_TOKEN", FAKE_HF_TOKEN)
@@ -64,6 +67,8 @@ def hero_project(tmp_path) -> Path:
 @pytest.fixture
 def configured_project(hero_project, cfg) -> Path:
     from qwenbench.hero import configure as conf
+    from qwenbench.hero import userhook
 
+    userhook.install()
     conf.apply(conf.plan_configure(cfg, hero_project, "a6000", "claude-opus-5-5"))
     return hero_project
