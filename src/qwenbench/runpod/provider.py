@@ -255,7 +255,9 @@ class RunpodPodsProvider:
                            progress: Progress = print) -> Endpoint:
         """Bring up the first profile with capacity, in order; reuse one that is already ready."""
         ready = first_ready(self, self.cfg, [p.name for p in profiles])
-        if ready:
+        # A pod that stopped itself (idle watchdog) leaves its ready session behind; reuse only a running pod.
+        pod = self.client.get_pod(ready.metadata["pod_id"]) if ready else None
+        if ready and pod and pod.status == "RUNNING":
             progress(f"{ready.profile} already up")
             return ready
         for profile, nxt in zip(profiles, [*profiles[1:], None], strict=True):
