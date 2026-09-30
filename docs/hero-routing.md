@@ -141,6 +141,8 @@ What happened:
 - **The dispatch file list included `.hero/NEXT.md` and friends**, which Hero's hooks rewrote mid-dispatch. `.hero/` is no longer attributed to the worker.
 - **The audit reported everything as Qwen's.** With no baseline it compared against HEAD, and Claude's commit hid its own edits. That is fixed as described above.
 
+Trial 2 and the overall verdict are in [live-trials.md](live-trials.md).
+
 ## Setup summary
 
 ```bash
